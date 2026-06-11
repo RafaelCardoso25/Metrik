@@ -36,26 +36,19 @@ function pluralizar(palavra) {
   if (!palavra) return palavra;
   const p = palavra.trim();
   const lower = p.toLowerCase();
-  // Já está no plural (termina em s, ns, is, es)
   if (/ns$|is$|es$/.test(lower)) return p;
   if (/s$/.test(lower) && !/[aeiou]s$/.test(lower)) return p;
-  // Terminações especiais
-  if (/al$/.test(lower)) return p.slice(0, -2) + 'ais';       // animal → animais
-  if (/el$/.test(lower)) return p.slice(0, -2) + 'éis';       // papel → papéis
-  if (/il$/.test(lower)) return p.slice(0, -2) + 'is';        // fácil → fáceis (simplificado)
-  if (/ol$/.test(lower)) return p.slice(0, -2) + 'óis';       // farol → faróis
-  if (/ul$/.test(lower)) return p.slice(0, -2) + 'uis';       // azul → azuis
-  if (/ão$/.test(lower)) return p.slice(0, -2) + 'ões';       // irmão → irmãos (mais comum: ões para profissões)
-  if (/m$/.test(lower)) return p.slice(0, -1) + 'ns';        // viagem → viagens (simplificado)
-  if (/r$|z$|n$/.test(lower)) return p + 'es';              // Vendedor → Vendedores, Corretor → Corretores
-  if (/s$/.test(lower)) return p;                         // lápis → lápis
-  // Padrão: adiciona s
-  return p + 's';                                           // Cliente → Clientes, Médico → Médicos
+  if (/al$/.test(lower)) return p.slice(0, -2) + 'ais';
+  if (/el$/.test(lower)) return p.slice(0, -2) + 'éis';
+  if (/il$/.test(lower)) return p.slice(0, -2) + 'is';
+  if (/ol$/.test(lower)) return p.slice(0, -2) + 'óis';
+  if (/ul$/.test(lower)) return p.slice(0, -2) + 'uis';
+  if (/ão$/.test(lower)) return p.slice(0, -2) + 'ões';
+  if (/m$/.test(lower)) return p.slice(0, -1) + 'ns';
+  if (/r$|z$|n$/.test(lower)) return p + 'es';
+  if (/s$/.test(lower)) return p;
+  return p + 's';
 }
-
-// Testa: pluralizar('Vendedor')='Vendedores', pluralizar('Cliente')='Clientes'
-// pluralizar('Médico')='Médicos', pluralizar('Corretor')='Corretores'
-// pluralizar('Consultor')='Consultores', pluralizar('Dentista')='Dentistas'
 
 // ═══════════════════════════════════════
 //  GLOBALS
@@ -65,6 +58,8 @@ let activeMonth = 0, activeYear = null;
 let cmpItems = [];
 let dentSort = 'taxa', activeDentFilter = 'all';
 let parsedExpenses = {}, parsedMonths = {};
+let parsedFaturamento = {};
+let _finModoReceita = 'aprovados';
 let clinicGoal = 0;
 let _despChartInst = null, _trendChartInst = null;
 let _finYearGrowthChart = null, _finYearLucroChart = null;
@@ -400,16 +395,10 @@ function applyConfigToUI() {
   const p = CFG.proposta || 'Orçamento';
   const pP = pluralizar(p);
   const emp = CFG.empresa || 'Metrik';
-
-  // Título
   const dt = document.getElementById('dashTitle');
   if (dt) dt.innerHTML = emp;
-
-  // Aba vendedores — usa plural correto
   const tabV = document.getElementById('tabVendedoresBtn');
   if (tabV) tabV.textContent = vP;
-
-  // Labels dinâmicos
   const ids = {
     'lblFatVend': `Faturamento por ${v}`,
     'lblPorVendedor': `Por ${v}`,
@@ -428,20 +417,12 @@ function applyConfigToUI() {
     const el = document.getElementById(id);
     if (el) el.textContent = txt;
   });
-
-  // Cabeçalhos de tabela
   const thV = document.getElementById('thVendedor');
   if (thV) thV.textContent = v;
-
-  // Nota cancelamentos
   const nc = document.getElementById('cancNote');
   if (nc) nc.textContent = `⚠️ Cancelamentos diferem de vencidos: o ${c.toLowerCase()} ativamente desistiu.`;
-
-  // Botão pacientes na aba evolução
   const btnPac = document.getElementById('btnMetricPacientes');
   if (btnPac) btnPac.textContent = `${cP} Fechados`;
-
-  // Meta global
   if (CFG.meta > 0 && clinicGoal === 0) {
     clinicGoal = CFG.meta;
     const gi = document.getElementById('goalInput');
@@ -468,7 +449,9 @@ function saveSessionJSON() {
     versao: '2.1', geradoEm: new Date().toISOString(),
     cfg: { ...CFG }, benchmarks: { ..._benchmarks },
     metas: { ..._metasMensais }, notas: { ..._notas },
-    despesas: { ...parsedExpenses }, meses: mesesSerializados,
+    despesas: { ...parsedExpenses },
+    faturamento: { ...parsedFaturamento },
+    meses: mesesSerializados,
   };
   const json = JSON.stringify(sessao, null, 2);
   const blob = new Blob([json], { type: 'application/json' });
@@ -496,6 +479,11 @@ function loadSessionJSON(file) {
       if (sessao.despesas) {
         Object.entries(sessao.despesas).forEach(([k, v]) => {
           parsedExpenses[k] = (parsedExpenses[k] || 0) + v;
+        });
+      }
+      if (sessao.faturamento) {
+        Object.entries(sessao.faturamento).forEach(([k, v]) => {
+          parsedFaturamento[k] = (parsedFaturamento[k] || 0) + v;
         });
       }
       let mesesCarregados = 0;
@@ -592,8 +580,9 @@ function readFile(file) {
         wb.SheetNames.forEach(name => {
           const ws = wb.Sheets[name];
           const rows = XLSX.utils.sheet_to_json(ws, { defval: '', raw: false });
-          if (!rows || rows.length < 2) return;
+          if (!rows || rows.length < 1) return;
           const parsed = parseSheet(rows, name, file.name);
+          console.log('parseSheet retornou:', parsed, 'aba:', name);
           if (Array.isArray(parsed)) {
             parsed.forEach(p => {
               if (p._detectionLog) { _detectionLogs.push({ ...p._detectionLog, fileName: file.name }); delete p._detectionLog; }
@@ -602,18 +591,40 @@ function readFile(file) {
           } else if (parsed && !parsed._invalid) {
             months.push(parsed);
           } else {
-            const expData = parseExpenseFile(rows, name, file.name);
-            if (expData) {
+            // Tenta faturamento real ANTES de qualquer outra coisa
+            const fatData = parseFaturamentoFile(rows, name, file.name);
+            if (fatData && fatData.length > 0) {
               foundExpense = true;
-              expData.forEach(ed => { parsedExpenses[ed.key] = (parsedExpenses[ed.key] || 0) + ed.total; });
-              _detectionLogs.push({ _isExpense: true, fileName: file.name, mesesCount: expData.length });
-            } else if (parsed && parsed._invalid && parsed.detectionLog) {
-              _detectionLogs.push({ ...parsed.detectionLog, fileName: file.name });
+              fatData.forEach(fd => {
+                parsedFaturamento[fd.key] = (parsedFaturamento[fd.key] || 0) + fd.total;
+              });
+              _detectionLogs.push({
+                _isFaturamento: true,
+                fileName: file.name,
+                mesesCount: fatData.length
+              });
+            } else {
+              // Tenta despesas
+              const expData = parseExpenseFile(rows, name, file.name);
+              if (expData && expData.length > 0) {
+                foundExpense = true;
+                expData.forEach(ed => {
+                  parsedExpenses[ed.key] = (parsedExpenses[ed.key] || 0) + ed.total;
+                });
+                _detectionLogs.push({
+                  _isExpense: true,
+                  fileName: file.name,
+                  mesesCount: expData.length
+                });
+              } else if (parsed && parsed._invalid && parsed.detectionLog) {
+                _detectionLogs.push({ ...parsed.detectionLog, fileName: file.name });
+              }
             }
           }
         });
         months.forEach(m => { parsedMonths[m.key] = m; });
-        if (months.length === 0 && !foundExpense) {
+        const temFatCarregado = Object.keys(parsedFaturamento).length > 0;
+        if (months.length === 0 && !foundExpense && !temFatCarregado) {
           reject(new Error(`Nenhuma aba válida em "${file.name}". Verifique se contém orçamentos ou despesas.`));
         } else { resolve(); }
       } catch (err) { reject(err); }
@@ -774,6 +785,118 @@ function parseExpenseFile(rows, sheetName, fileName) {
   return results.length > 0 ? results : null;
 }
 
+function parseFaturamentoFile(rows, sheetName, fileName) {
+  if (!rows || rows.length < 1) return null;
+  const keys = Object.keys(rows[0]);
+  if (keys.length < 2) return null;
+  console.log('parseFat keys:', keys);
+  console.log('parseFat row0:', rows[0]);
+  console.log('parseFat row1:', rows[1]);
+
+  const FATURAMENTO_CANDIDATES = [
+    'FATURAMENTO', 'RECEITA REAL', 'RECEITA', 'CAIXA',
+    'RECEBIDO', 'RECEBIMENTOS', 'FATURADO', 'RECEITA FATURADA'
+  ];
+
+  const MES_MAP = {
+    'JANEIRO': 0, 'FEVEREIRO': 1, 'MARCO': 2, 'ABRIL': 3, 'MAIO': 4, 'JUNHO': 5,
+    'JULHO': 6, 'AGOSTO': 7, 'SETEMBRO': 8, 'OUTUBRO': 9, 'NOVEMBRO': 10, 'DEZEMBRO': 11,
+    'JAN': 0, 'FEV': 1, 'MAR': 2, 'ABR': 3, 'MAI': 4, 'JUN': 5,
+    'JUL': 6, 'AGO': 7, 'SET': 8, 'OUT': 9, 'NOV': 10, 'DEZ': 11,
+    'FEB': 1, 'APR': 3, 'MAY': 4, 'AUG': 7, 'SEP': 8, 'OCT': 9, 'DEC': 11,
+  };
+
+  const fileYearMatch = fileName.match(/\b(20\d{2})\b/) || sheetName.match(/\b(20\d{2})\b/);
+  const inferredAno = fileYearMatch ? +fileYearMatch[0] : new Date().getFullYear();
+
+  // Verifica se é arquivo de faturamento pelo nome do arquivo, aba ou primeira coluna
+  const nomeArquivoN = normStr(fileName);
+  const nomeAbaN = normStr(sheetName);
+  const primeiraColN = normStr(keys[0]);
+
+  const isFaturamentoFile = FATURAMENTO_CANDIDATES.some(c =>
+    nomeArquivoN.includes(c) || nomeAbaN.includes(c) || primeiraColN === c || primeiraColN.includes(c)
+  );
+
+  // Verifica também se alguma linha tem label de faturamento
+  const labelCol = keys[0];
+  const temLinhaFat = rows.some(row => {
+    const n = normStr(String(row[labelCol] || ''));
+    return FATURAMENTO_CANDIDATES.some(c => n === c || n.includes(c));
+  });
+
+  if (!isFaturamentoFile && !temLinhaFat) return null;
+
+  // Detecta colunas de mês
+  function parseMesAno(rawKey) {
+    const s = String(rawKey).toUpperCase()
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+    const sn = s.replace(/[\s\/\-]/g, '');
+
+    const SKIP = ['TOTAL', 'TOTAIS', 'SOMA', 'SUBTOTAL', 'TOTALGERAL', 'GRANDTOTAL', 'ANUAL',
+                  'FATURAMENTO', 'RECEITA', 'DESPESA', 'CATEGORIA', 'ITEM', 'DESCRICAO'];
+    if (SKIP.some(t => sn === t)) return null;
+    if (s.startsWith('TOTAL') || s.startsWith('GRAND')) return null;
+
+    let ano = inferredAno;
+    const m4 = s.match(/(20\d{2})/);
+    if (m4) ano = +m4[1];
+    const m2 = s.match(/[\/\-](\d{2})$/);
+    if (m2 && !m4) ano = 2000 + (+m2[1]);
+
+    let mesIdx = -1;
+    for (const [alias, idx] of Object.entries(MES_MAP)) {
+      if (s === alias || s.startsWith(alias + '/') || s.startsWith(alias + '-') ||
+          s.startsWith(alias + ' ') || s.endsWith('/' + alias) || s.endsWith('-' + alias)) {
+        mesIdx = idx; break;
+      }
+    }
+
+    // Tenta MM/AAAA ou MM-AAAA
+    if (mesIdx < 0) {
+      const numM = s.match(/^0?(\d{1,2})[\/\-](20\d{2}|\d{2})$/);
+      if (numM) { const m = +numM[1]; if (m >= 1 && m <= 12) mesIdx = m - 1; }
+    }
+
+    if (mesIdx < 0) return null;
+    return { mes: mesIdx, ano, key: `${ano}-${String(mesIdx + 1).padStart(2, '0')}` };
+  }
+
+  const monthCols = [];
+  for (const k of keys) {
+    if (k === labelCol) continue;
+    const parsed = parseMesAno(k);
+    if (!parsed) continue;
+    if (!monthCols.find(mc => mc.key === parsed.key)) {
+      monthCols.push({ colName: k, ...parsed });
+    }
+  }
+
+  if (monthCols.length === 0) return null;
+
+  const LABEL_SKIP = ['TOTAL', 'TOTAIS', 'SOMA', 'SUBTOTAL', 'TOTAL GERAL', 'GRAND TOTAL'];
+  const totals = {};
+  for (const mc of monthCols) totals[mc.key] = { ...mc, total: 0 };
+
+  for (const row of rows) {
+    const labelRaw = String(row[labelCol] || '').trim();
+    if (!labelRaw) continue;
+    const labelNorm = normStr(labelRaw);
+    if (LABEL_SKIP.some(t => labelNorm === t)) continue;
+    if (labelNorm.startsWith('TOTAL ') || labelNorm.startsWith('GRAND ')) continue;
+
+    for (const mc of monthCols) {
+      const raw = row[mc.colName];
+      if (raw === null || raw === undefined || raw === '') continue;
+      const vv = parseBrNum(String(raw));
+      if (vv > 0) totals[mc.key].total += vv;
+    }
+  }
+
+  const results = Object.values(totals).filter(m => m.total > 0);
+  return results.length > 0 ? results : null;
+}
+
 function updateChips() {
   const chips = document.getElementById('monthChips');
   const bc = Object.values(parsedMonths).sort((a, b) => a.key.localeCompare(b.key)).map(m => {
@@ -785,15 +908,28 @@ function updateChips() {
     const [ano, mes] = k.split('-');
     return `<div class="chip-expense">💰 Despesas ${MONTHS_PT[+mes - 1]} ${ano} <span class="chip-rm" onclick="removeExpense('${k}')">✕</span></div>`;
   }).join('');
-  chips.innerHTML = bc + ec;
+  const fc = Object.entries(parsedFaturamento).sort((a, b) => a[0].localeCompare(b[0])).map(([k]) => {
+    const [ano, mes] = k.split('-');
+    return `<div class="chip-expense" style="border-color:rgba(167,139,250,.4);background:rgba(167,139,250,.08)">
+      💵 Faturamento Real ${MONTHS_PT[+mes - 1]} ${ano}
+      <span class="chip-rm" onclick="removeFaturamento('${k}')">✕</span>
+    </div>`;
+  }).join('');
+
+  chips.innerHTML = bc + ec + fc;
   const fb = document.getElementById('detectionFeedback');
   if (fb) fb.innerHTML = _detectionLogs.map(log => {
     const isExp = log._isExpense;
+    const isFat = log._isFaturamento;
     const vLabel = CFG.vendedor || 'Vendedor';
-    const cols = isExp
-      ? [{ k: 'Despesas/Passivos', ok: true }, { k: 'Meses: ' + log.mesesCount, ok: true }]
-      : [{ k: 'Emissão', ok: log.emissao }, { k: vLabel, ok: log.dentista }, { k: 'Situação', ok: log.situacao }, { k: 'Total', ok: log.total }, { k: 'Campanha', ok: log.campanha, opt: true }];
-    return `<div class="det-file"><div class="det-file-name">${isExp ? '💰' : '📋'} <strong>${log.fileName}</strong> — ${isExp ? 'Despesas detectadas' : 'Orçamentos detectados'}</div><div class="det-cols">${cols.map(cc => `<span class="det-col ${cc.ok ? 'det-ok' : cc.opt ? 'det-info' : 'det-miss'}">${cc.ok ? '✓' : '✗'} ${cc.k}</span>`).join('')}</div></div>`;
+    const cols = isFat
+      ? [{ k: 'Faturamento Real', ok: true }, { k: 'Meses: ' + log.mesesCount, ok: true }]
+      : isExp
+        ? [{ k: 'Despesas/Passivos', ok: true }, { k: 'Meses: ' + log.mesesCount, ok: true }]
+        : [{ k: 'Emissão', ok: log.emissao }, { k: vLabel, ok: log.dentista }, { k: 'Situação', ok: log.situacao }, { k: 'Total', ok: log.total }, { k: 'Campanha', ok: log.campanha, opt: true }];
+    const icon = isFat ? '💵' : isExp ? '💰' : '📋';
+    const label = isFat ? 'Faturamento real detectado' : isExp ? 'Despesas detectadas' : 'Orçamentos detectados';
+    return `<div class="det-file"><div class="det-file-name">${icon} <strong>${log.fileName}</strong> — ${label}</div><div class="det-cols">${cols.map(cc => `<span class="det-col ${cc.ok ? 'det-ok' : cc.opt ? 'det-info' : 'det-miss'}">${cc.ok ? '✓' : '✗'} ${cc.k}</span>`).join('')}</div></div>`;
   }).join('');
 }
 
@@ -807,6 +943,17 @@ function removeExpense(key) {
   delete parsedExpenses[key]; updateChips();
   if (Object.keys(parsedMonths).length === 0 && Object.keys(parsedExpenses).length === 0)
     document.getElementById('btnAnalyze').style.display = 'none';
+}
+function removeFaturamento(key) {
+  delete parsedFaturamento[key];
+  updateChips();
+  if (
+    Object.keys(parsedMonths).length === 0 &&
+    Object.keys(parsedExpenses).length === 0 &&
+    Object.keys(parsedFaturamento).length === 0
+  ) {
+    document.getElementById('btnAnalyze').style.display = 'none';
+  }
 }
 function showErr(msg) {
   const b = document.getElementById('errBanner');
@@ -954,7 +1101,6 @@ function getActivePeriodLabel() {
   return MONTHS[activeMonth].periodo;
 }
 
-// ── META DO PERÍODO ATIVO ──
 function getGoalForActivePeriod() {
   if (activeYear === null && activeMonth >= 0) {
     const key = MONTHS[activeMonth]?.key;
@@ -1091,7 +1237,6 @@ function syncGoalInput() {
   }
 }
 
-// ── BANNER MÊS PARCIAL ──
 function renderPartialMonthBanner(M) {
   const existing = document.getElementById('partialMonthBanner');
   if (existing) existing.remove();
@@ -1114,7 +1259,6 @@ function renderPartialMonthBanner(M) {
   if (kpiGrid && kpiGrid.parentNode) kpiGrid.parentNode.insertBefore(banner, kpiGrid);
 }
 
-// ── GOAL PROGRESS ──
 function renderGoalProgress() {
   const bar = document.getElementById('goalProgressBar');
   const fill = document.getElementById('goalProgressFill');
@@ -1130,7 +1274,6 @@ function renderGoalProgress() {
   lbl.style.color = color; lbl.textContent = pctVal + '% da meta (' + fmtK(goalAtivo) + ')';
 }
 
-// ── PERIOD SELECTOR ──
 function renderPeriodSelector() {
   const anos = Object.keys(YEARS).map(Number).sort((a, b) => a - b);
   document.getElementById('monthTabsKPI').innerHTML = anos.map(ano => {
@@ -1141,7 +1284,6 @@ function renderPeriodSelector() {
   }).join('');
 }
 
-// ── PORTAL DROPDOWN ──
 let _portalTarget = null;
 function openPortalDropdown(arrowEl, id) {
   const portal = document.getElementById('dropPortal');
@@ -1195,7 +1337,6 @@ function setActiveMonthView(idx) {
   closePortalDropdown(); render();
 }
 
-// ── EXEC ──
 function renderExec(M, prev) {
   const g = M.geral;
   const topDent = [...M.dentistas].sort((a, b) => b.valor_aprovado - a.valor_aprovado)[0];
@@ -1232,7 +1373,6 @@ function renderExec(M, prev) {
     </div>`;
 }
 
-// ── SET GOAL ──
 function setGoal(raw) {
   const val = parseBrNum(raw.replace(/[^\d.,]/g, '')) || 0;
   if (activeYear === null && MONTHS[activeMonth]) {
@@ -1250,7 +1390,6 @@ function setGoal(raw) {
   if (M) { renderKPIs(M, getPrev()); renderGoalProgress(); }
 }
 
-// ── KPIs ──
 function renderKPIs(M, prev) {
   const g = M.geral, pg = prev?.geral;
   const d1 = pg ? delta(g.aprovado, pg.aprovado) : { html: '' };
@@ -1285,7 +1424,6 @@ function renderKPIs(M, prev) {
   }).join('');
 }
 
-// ── FAT BARS ──
 function renderFatBars(M) {
   const sorted = [...M.dentistas].sort((a, b) => b.valor_aprovado - a.valor_aprovado);
   const maxV = Math.max(...sorted.map(d => d.valor_aprovado), 1);
@@ -1297,7 +1435,6 @@ function renderFatBars(M) {
   ).join('');
 }
 
-// ── CANAIS GRID ──
 function renderCanaisGrid(M) {
   document.getElementById('canaisGrid').innerHTML = [...M.canais].sort((a, b) => b.valor - a.valor).map(c =>
     `<div class="canal-c">
@@ -1309,7 +1446,6 @@ function renderCanaisGrid(M) {
   ).join('');
 }
 
-// ── INSIGHTS ──
 function renderInsights(M) {
   const ins = generateInsights(M);
   ins.sort((a, b) => ({ 'a': 0, 'o': 1, 'w': 2, 'i': 3, 'g': 4 }[a.t] || 9) - ({ 'a': 0, 'o': 1, 'w': 2, 'i': 3, 'g': 4 }[b.t] || 9));
@@ -1509,7 +1645,7 @@ function saveMetasMensais() {
 }
 
 // ═══════════════════════════════════════
-//  EXPORT EXCEL (xlsx real)
+//  EXPORT EXCEL
 // ═══════════════════════════════════════
 function exportExcel() {
   const M = getActiveData();
@@ -1530,17 +1666,13 @@ function exportExcel() {
     if (raw) records = raw.records.map(r => ({ ...r, _periodo: MONTHS[activeMonth].periodo }));
   }
   if (!records.length) { showToast('❌ Nenhum registro para exportar.', true); return; }
-
   const formatDate = d => {
     if (!d) return '';
     if (d instanceof Date) return d.toLocaleDateString('pt-BR');
     return String(d);
   };
-
   const vLabel = CFG.vendedor || 'Vendedor';
   const cLabel = CFG.cliente || 'Cliente';
-
-  // Monta os dados como array de objetos — XLSX cria colunas separadas automaticamente
   const wsData = records.map(r => ({
     'Período': r._periodo || '',
     'Emissão': formatDate(r.emissao),
@@ -1552,19 +1684,13 @@ function exportExcel() {
     'Canal': canalDisplay(r.campanha || ''),
     'Telefone': r.telefone || '',
   }));
-
   const wb = XLSX.utils.book_new();
   const ws = XLSX.utils.json_to_sheet(wsData);
-
-  // Largura das colunas
   ws['!cols'] = [
     { wch: 16 }, { wch: 14 }, { wch: 14 }, { wch: 22 }, { wch: 28 },
     { wch: 16 }, { wch: 14 }, { wch: 20 }, { wch: 18 }
   ];
-
   XLSX.utils.book_append_sheet(wb, ws, 'Dados');
-
-  // Aba de resumo
   const g = M.geral;
   const goalAtivo = getGoalForActivePeriod();
   const resumoData = [
@@ -1589,8 +1715,6 @@ function exportExcel() {
   const wsResumo = XLSX.utils.json_to_sheet(resumoData);
   wsResumo['!cols'] = [{ wch: 28 }, { wch: 20 }];
   XLSX.utils.book_append_sheet(wb, wsResumo, 'Resumo');
-
-  // Aba de vendedores
   const vData = [...M.dentistas].sort((a, b) => b.valor_aprovado - a.valor_aprovado).map((d, i) => ({
     '#': i + 1,
     [vLabel]: d.nome,
@@ -1607,7 +1731,6 @@ function exportExcel() {
   const wsVend = XLSX.utils.json_to_sheet(vData);
   wsVend['!cols'] = [{ wch: 5 }, { wch: 22 }, { wch: 14 }, { wch: 12 }, { wch: 16 }, { wch: 16 }, { wch: 18 }, { wch: 20 }, { wch: 12 }, { wch: 16 }, { wch: 18 }];
   XLSX.utils.book_append_sheet(wb, wsVend, pluralizar(vLabel));
-
   const nomeArq = (CFG.empresa || 'Metrik').replace(/[^a-zA-Z0-9]/g, '_');
   const periodo = getActivePeriodLabel().replace(/[^a-zA-Z0-9]/g, '_');
   XLSX.writeFile(wb, `Metrik_${nomeArq}_${periodo}.xlsx`);
@@ -1722,7 +1845,6 @@ function renderCanais(M) {
   const vLabel = CFG.vendedor || 'Vendedor';
   const sorted = [...M.canais].sort((a, b) => b.valor - a.valor);
   const PALETTE = ['#4F9CF9', '#34D399', '#FBBF24', '#F87171', '#A78BFA', '#FB923C', '#38BDF8', '#F472B6', '#4ADE80', '#FCD34D'];
-
   if (_canalDonutChart) { _canalDonutChart.destroy(); _canalDonutChart = null; }
   const canvas = document.getElementById('canalDonutChart');
   if (canvas && sorted.length > 0) {
@@ -1754,7 +1876,6 @@ function renderCanais(M) {
       }
     });
   }
-
   const totalReceita = sorted.reduce((s, c) => s + c.valor, 0);
   const legendEl = document.getElementById('canalDonutLegend');
   if (legendEl) {
@@ -1770,7 +1891,6 @@ function renderCanais(M) {
       </div>`;
     }).join('');
   }
-
   const maxConv = Math.max(...sorted.map(c => c.taxa), 1);
   const convEl = document.getElementById('canalConvBars');
   if (convEl) {
@@ -1782,7 +1902,6 @@ function renderCanais(M) {
       </div>`
     ).join('');
   }
-
   const maxVal = Math.max(...sorted.map(c => c.valor), 1);
   const fatEl = document.getElementById('canalFatBars');
   if (fatEl) {
@@ -1793,7 +1912,6 @@ function renderCanais(M) {
       </div>`
     ).join('');
   }
-
   const tblEl = document.getElementById('canalTable');
   if (tblEl) {
     tblEl.innerHTML = `
@@ -1812,11 +1930,9 @@ function renderCanais(M) {
             <td>${taxaBadge(c.taxa)}</td>
             <td style="color:var(--green)">${fmtK(c.valor)}</td>
             <td>${fmtK(c.ticket)}</td>
-          </tr>`
-    ).join('')}
+          </tr>`).join('')}
       </tbody>`;
   }
-
   const dentTableEl = document.getElementById('canalDentTable');
   if (dentTableEl && M.dentistas.length > 0) {
     const todosCanais = [...new Set(M.canais.map(c => c.canal))];
@@ -1834,8 +1950,7 @@ function renderCanais(M) {
               <tr>
                 <td><strong>${d.nome}</strong></td>
                 ${todosCanais.map(c => `<td style="text-align:center">${d.canais[c] || '—'}</td>`).join('')}
-              </tr>`
-    ).join('')}
+              </tr>`).join('')}
           </tbody>
         </table>
       </div>`;
@@ -2055,8 +2170,6 @@ function renderGraficoVendedores() {
 }
 function renderRankingVendedores(meses, todos) {
   const vLabel = CFG.vendedor || 'Vendedor';
-  const cLabel = CFG.cliente || 'Cliente';
-  const vLabelP = pluralizar(vLabel);
   const PALETTE = ['#4F9CF9', '#34D399', '#FBBF24', '#F87171', '#A78BFA', '#FB923C', '#38BDF8', '#F472B6'];
   const cfgs = {
     conversao: { getValue: d => d && d.total > 0 ? +(d.taxa || 0) : null, fmt: v => v + '%' },
@@ -2183,32 +2296,163 @@ function toggleCmpItem(type, idx) {
   saveLocalState(); renderComparativo();
 }
 
-function getCmpData(item) { return item.type === 'year' ? YEARS[item.idx] && YEARS[item.idx].data : MONTHS[item.idx]; }
+function getCmpData(item) {
+  if (item.type === 'year') {
+    return YEARS[item.idx] && YEARS[item.idx].data;
+  }
+  return MONTHS[item.idx];
+}
 function getCmpLabel(item) { return item.type === 'year' ? String(item.idx) : MONTHS[item.idx].periodo; }
+
+// ═══════════════════════════════════════
+//  COMPARATIVO — FUNÇÕES AUXILIARES
+// ═══════════════════════════════════════
+function getPeriodosJustosComparativo(ano1, ano2) {
+  const meses1 = MONTHS.filter(m => m.ano === ano1).map(m => m.key).sort();
+  const meses2 = MONTHS.filter(m => m.ano === ano2).map(m => m.key).sort();
+  if (!meses1.length || !meses2.length) return null;
+  const ultimoMes1 = parseInt(meses1[meses1.length - 1].split('-')[1]);
+  const ultimoMes2 = parseInt(meses2[meses2.length - 1].split('-')[1]);
+  const corte = Math.min(ultimoMes1, ultimoMes2);
+  const precisaCorte = ultimoMes1 !== ultimoMes2;
+  const meses1Cortados = meses1.filter(k => parseInt(k.split('-')[1]) <= corte);
+  const meses2Cortados = meses2.filter(k => parseInt(k.split('-')[1]) <= corte);
+  return {
+    corte, precisaCorte,
+    meses1: meses1Cortados, meses2: meses2Cortados,
+    labelCorte: MONTHS_PT[corte - 1], ano1, ano2
+  };
+}
+
+function computeMesesAgregados(chavesMeses, labelPeriodo) {
+  const mesesData = chavesMeses.map(k => MONTHS.find(m => m.key === k)).filter(Boolean);
+  if (!mesesData.length) return null;
+  const allRecords = mesesData.flatMap(m => (parsedMonths[m.key] && parsedMonths[m.key].records) || []);
+  if (!allRecords.length) return null;
+  const data = computeMonth({
+    records: allRecords,
+    periodo: labelPeriodo,
+    mes: null,
+    ano: mesesData[0].ano,
+    key: 'range-' + chavesMeses.join('-')
+  });
+  data.periodo = labelPeriodo;
+  data.isRange = true;
+  return data;
+}
 
 function renderCmpContent() {
   const vLabel = CFG.vendedor || 'Vendedor';
   const vLabelP = pluralizar(vLabel);
+
   if (cmpItems.length < 2) {
-    document.getElementById('cmpContent').innerHTML = '<div style="color:var(--muted);text-align:center;padding:40px">Selecione pelo menos 2 períodos para comparar.</div>';
+    document.getElementById('cmpContent').innerHTML =
+      '<div style="color:var(--muted);text-align:center;padding:40px">Selecione pelo menos 2 períodos para comparar.</div>';
     return;
   }
-  const pairs = cmpItems.map(item => ({ data: getCmpData(item), label: getCmpLabel(item) })).filter(p => p.data);
+
+  const anosInteiros = cmpItems.filter(c => c.type === 'year').map(c => +c.idx);
+  let periodoJusto = null;
+  let avisoCorteHtml = '';
+
+  if (anosInteiros.length >= 2) {
+    const ano1 = Math.min(...anosInteiros);
+    const ano2 = Math.max(...anosInteiros);
+    periodoJusto = getPeriodosJustosComparativo(ano1, ano2);
+    if (periodoJusto && periodoJusto.precisaCorte) {
+      avisoCorteHtml = `
+        <div style="background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.25);
+          border-radius:10px;padding:12px 16px;margin-bottom:16px;font-size:12px;
+          color:var(--yellow);display:flex;align-items:center;gap:10px">
+          <span style="font-size:16px">⚠️</span>
+          <span>Comparação justa ativada: exibindo
+          <strong>${ano1} Jan→${periodoJusto.labelCorte}</strong>
+          vs <strong>${ano2} Jan→${periodoJusto.labelCorte}</strong>
+          (${ano2} tem dados até ${periodoJusto.labelCorte}).</span>
+        </div>`;
+    }
+  }
+
+  let pairs;
+  if (periodoJusto && periodoJusto.precisaCorte) {
+    const ano1 = Math.min(...anosInteiros);
+    const ano2 = Math.max(...anosInteiros);
+    pairs = cmpItems.map(item => {
+      if (item.type === 'year') {
+        const ano = +item.idx;
+        const chaves = ano === ano1 ? periodoJusto.meses1 : periodoJusto.meses2;
+        const label = `${ano} Jan→${periodoJusto.labelCorte}`;
+        const data = computeMesesAgregados(chaves, label);
+        return { data, label };
+      }
+      return { data: getCmpData(item), label: getCmpLabel(item) };
+    }).filter(p => p.data);
+  } else {
+    pairs = cmpItems.map(item => ({
+      data: getCmpData(item),
+      label: getCmpLabel(item),
+      fonte: (() => {
+        if (item.type === 'year') {
+          const ano = item.idx;
+          const chaves = getMesesFinanceirosPorAno(+ano);
+          const temFat = chaves.some(k => parsedFaturamento[k] !== undefined);
+          const temOrc = chaves.some(k => MONTHS.find(m => m.key === k));
+          return temFat ? 'faturamento' : temOrc ? 'aprovados' : null;
+        } else {
+          const m = MONTHS[item.idx];
+          if (!m) return null;
+          const temFat = parsedFaturamento[m.key] !== undefined;
+          return temFat ? 'faturamento' : 'aprovados';
+        }
+      })()
+    })).filter(p => p.data);
+  }
+
   if (pairs.length < 2) {
-    document.getElementById('cmpContent').innerHTML = '<div style="color:var(--muted);text-align:center;padding:40px">Dados insuficientes.</div>';
+    document.getElementById('cmpContent').innerHTML =
+      '<div style="color:var(--muted);text-align:center;padding:40px">Dados insuficientes.</div>';
     return;
   }
-  const selected = pairs.map(p => p.data), labels = pairs.map(p => p.label);
-  const last = selected[selected.length - 1], first_ = selected[0];
+
+  // detecta fontes mistas entre os períodos comparados
+  const fontesCmp = pairs.map(p => p.fonte).filter(Boolean);
+  const fontesMistasCmp = [...new Set(fontesCmp)].length > 1;
+  const avisoFontesCmpHtml = fontesMistasCmp ? `
+    <div style="background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.3);
+      border-radius:10px;padding:12px 16px;margin-bottom:16px;
+      display:flex;align-items:flex-start;gap:10px">
+      <span style="font-size:18px">⚠️</span>
+      <div style="font-size:12px;color:var(--yellow);line-height:1.6">
+        <strong>Atenção: fontes de dados diferentes entre os períodos comparados.</strong><br>
+        ${pairs.map(p => `<strong>${p.label}</strong>: ${p.fonte === 'faturamento' ? 'faturamento real (caixa)' : 'orçamentos aprovados'}`).join(' · ')}<br>
+        A comparação pode não ser precisa pois as fontes são distintas.
+      </div>
+    </div>` : '';
+
+  const selected = pairs.map(p => p.data);
+  const labels = pairs.map(p => p.label);
+  const last = selected[selected.length - 1];
+  const first_ = selected[0];
 
   document.getElementById('cmpContent').innerHTML = `
-    <div class="fu d1"><div class="sec">KPIs Comparativos</div><div class="kpi-grid" id="cmpKpis"></div></div>
+    ${avisoFontesCmpHtml}
+    ${avisoCorteHtml}
+    <div class="fu d1">
+      <div class="sec">KPIs Comparativos</div>
+      <div class="kpi-grid" id="cmpKpis"></div>
+    </div>
     <div class="grid-2 fu d2">
-      <div class="card"><div class="card-title"><span class="dot" style="background:var(--accent)"></span> Evolução da Receita</div><div id="cmpRecBars"></div></div>
-      <div class="card"><div class="card-title"><span class="dot" style="background:var(--green)"></span> Evolução da Conversão</div><div id="cmpConvBars"></div></div>
+      <div class="card">
+        <div class="card-title"><span class="dot" style="background:var(--accent)"></span>Evolução da Receita</div>
+        <div id="cmpRecBars"></div>
+      </div>
+      <div class="card">
+        <div class="card-title"><span class="dot" style="background:var(--green)"></span>Evolução da Conversão</div>
+        <div id="cmpConvBars"></div>
+      </div>
     </div>
     <div class="card full fu d3">
-      <div class="card-title"><span class="dot" style="background:var(--accent2)"></span> ${vLabelP} — Comparativo</div>
+      <div class="card-title"><span class="dot" style="background:var(--accent2)"></span>${vLabelP} — Comparativo</div>
       <div class="dent-chart-tabs" id="dentChartTabs">
         <button class="dfilter-btn active" onclick="setDentChartMetric('faturamento',this)">Faturamento</button>
         <button class="dfilter-btn" onclick="setDentChartMetric('ticket',this)">Ticket</button>
@@ -2219,12 +2463,14 @@ function renderCmpContent() {
       <div class="tbl-wrap" style="margin-top:18px"><table class="cmp-table" id="cmpDentTable"></table></div>
     </div>
     <div class="card full fu d4">
-      <div class="card-title"><span class="dot" style="background:var(--yellow)"></span> Canais — Comparativo</div>
+      <div class="card-title"><span class="dot" style="background:var(--yellow)"></span>Canais — Comparativo</div>
       <div class="tbl-wrap"><table class="cmp-table" id="cmpCanalTable"></table></div>
     </div>
     <div class="fu d5">
       <div class="sec">Alertas Comparativos</div>
-      <div style="background:rgba(167,139,250,.05);border:1px solid rgba(167,139,250,.15);border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:var(--accent2)">📈 Comparando ${selected.length} períodos.</div>
+      <div style="background:rgba(167,139,250,.05);border:1px solid rgba(167,139,250,.15);border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:var(--accent2)">
+        📈 Comparando ${selected.length} períodos.
+      </div>
       <div class="cmp-ins-grid" id="cmpInsGrid"></div>
     </div>`;
 
@@ -2236,11 +2482,16 @@ function renderCmpContent() {
     { l: 'Score', vals: selected.map(m => m.score + '/100'), d: arrowCmp(last.score, first_.score) },
     { l: 'Cancelamentos', vals: selected.map(m => String(m.geral.cancelados)), d: arrowCmp(last.geral.cancelados, first_.geral.cancelados, false) },
   ];
+
   document.getElementById('cmpKpis').innerHTML = kpis.map(k =>
     `<div class="kpi">
       <div class="kpi-lbl">${k.l}</div>
       <div style="display:flex;flex-direction:column;gap:4px;margin-top:6px">
-        ${selected.map((m, i) => `<div style="font-size:12px;color:var(--muted2)"><span style="font-size:10px;color:var(--muted)">${labels[i]}:</span> <strong style="color:var(--text)">${k.vals[i]}</strong></div>`).join('')}
+        ${selected.map((m, i) => `
+          <div style="font-size:12px;color:var(--muted2)">
+            <span style="font-size:10px;color:var(--muted)">${labels[i]}:</span>
+            <strong style="color:var(--text)">${k.vals[i]}</strong>
+          </div>`).join('')}
       </div>
       ${k.d ? `<div class="kpi-delta" style="margin-top:8px">${k.d} vs ${labels[0]}</div>` : ''}
     </div>`
@@ -2248,12 +2499,14 @@ function renderCmpContent() {
 
   const maxRec = Math.max(...selected.map(m => m.geral.aprovado), 1);
   const maxConv = Math.max(...selected.map(m => m.geral.taxa), 1);
+
   document.getElementById('cmpRecBars').innerHTML = selected.map((m, i) =>
     `<div class="bar-item">
       <div class="bar-lbl"><span>${labels[i]}</span><span>${fmtK(m.geral.aprovado)}</span></div>
       <div class="bar-track"><div class="bar-fill" style="width:${(m.geral.aprovado / maxRec * 100).toFixed(1)}%;background:var(--accent)"></div></div>
     </div>`
   ).join('');
+
   document.getElementById('cmpConvBars').innerHTML = selected.map((m, i) =>
     `<div class="bar-item">
       <div class="bar-lbl"><span>${labels[i]}</span><span>${m.geral.taxa}%</span></div>
@@ -2264,43 +2517,62 @@ function renderCmpContent() {
   const allDents = [...new Set(selected.flatMap(m => m.dentistas.map(d => d.nome)))];
   document.getElementById('cmpDentTable').innerHTML = `
     <thead>
-      <tr><th>${vLabel}</th>${selected.map((m, i) => `<th colspan="3" style="text-align:center;color:var(--accent)">${labels[i]}</th>`).join('')}</tr>
+      <tr>
+        <th>${vLabel}</th>
+        ${selected.map((m, i) => `<th colspan="3" style="text-align:center;color:var(--accent)">${labels[i]}</th>`).join('')}
+      </tr>
       <tr><th></th>${selected.map(() => '<th>Conv.</th><th>Faturado</th><th>Ticket</th>').join('')}</tr>
     </thead>
     <tbody>
       ${allDents.map(nome => `
-        <tr><td><strong>${nome}</strong></td>
-        ${selected.map(m => {
+        <tr>
+          <td><strong>${nome}</strong></td>
+          ${selected.map(m => {
     const d = m.dentistas.find(x => x.nome === nome);
     return d
       ? `<td>${taxaBadge(d.taxa)}</td><td style="color:var(--green)">${fmtK(d.valor_aprovado)}</td><td>${fmtK(d.ticket_medio)}</td>`
       : '<td colspan="3" style="color:var(--muted);text-align:center">—</td>';
   }).join('')}
-        </tr>`
-  ).join('')}
+        </tr>`).join('')}
     </tbody>`;
 
   const allCanais = [...new Set(selected.flatMap(m => m.canais.map(c => c.canal)))];
   document.getElementById('cmpCanalTable').innerHTML = `
-    <thead><tr><th>Canal</th>${selected.map((m, i) => `<th>Conv. ${labels[i]}</th><th>Receita ${labels[i]}</th>`).join('')}</tr></thead>
+    <thead>
+      <tr>
+        <th>Canal</th>
+        ${selected.map((m, i) => `<th>Conv. ${labels[i]}</th><th>Receita ${labels[i]}</th>`).join('')}
+      </tr>
+    </thead>
     <tbody>
       ${allCanais.map(canal => `
-        <tr><td><strong>${canalDisplay(canal)}</strong></td>
-        ${selected.map(m => {
+        <tr>
+          <td><strong>${canalDisplay(canal)}</strong></td>
+          ${selected.map(m => {
     const c = m.canais.find(x => x.canal === canal);
     return c ? `<td>${c.taxa}%</td><td style="color:var(--green)">${fmtK(c.valor)}</td>` : '<td>—</td><td>—</td>';
   }).join('')}
-        </tr>`
-  ).join('')}
+        </tr>`).join('')}
     </tbody>`;
 
   _dentChartData = { selected, labels, allDents };
   renderDentChart();
 
   const cmpIns = generateCmpInsights(selected);
-  cmpIns.sort((a, b) => ({ 'a': 0, 'o': 1, 'w': 2, 'i': 3, 'g': 4 }[a.t] || 9) - ({ 'a': 0, 'o': 1, 'w': 2, 'i': 3, 'g': 4 }[b.t] || 9));
+  cmpIns.sort((a, b) =>
+    ({ 'a': 0, 'o': 1, 'w': 2, 'i': 3, 'g': 4 }[a.t] || 9) -
+    ({ 'a': 0, 'o': 1, 'w': 2, 'i': 3, 'g': 4 }[b.t] || 9)
+  );
   document.getElementById('cmpInsGrid').innerHTML = cmpIns.length > 0
-    ? cmpIns.map(i => `<div class="cmp-ins"><div class="ins-ico" style="background:rgba(167,139,250,.1)">📈</div><div><div class="ins-type" style="color:var(--accent2)">${i.l}</div><div class="ins-txt">${i.txt}</div><div class="ins-sub">${i.sub}</div></div></div>`).join('')
+    ? cmpIns.map(i =>
+      `<div class="cmp-ins">
+          <div class="ins-ico" style="background:rgba(167,139,250,.1)">📈</div>
+          <div>
+            <div class="ins-type" style="color:var(--accent2)">${i.l}</div>
+            <div class="ins-txt">${i.txt}</div>
+            <div class="ins-sub">${i.sub}</div>
+          </div>
+        </div>`).join('')
     : '<div style="color:var(--muted);font-size:13px">Nenhum alerta gerado.</div>';
 }
 
@@ -2364,7 +2636,7 @@ function generateCmpInsights(selected) {
     ins.push({ t: up ? 'g' : 'a', l: `Receita ${up ? 'Cresceu' : 'Caiu'} ${Math.abs(recPct).toFixed(1)}%`, txt: `De ${fmtK(fg.aprovado)} para ${fmtK(lg.aprovado)} — ${up ? '+' : ''}${fmtK(recDiff)}.`, sub: up ? 'Tendência positiva.' : 'Queda preocupante — revisar processo.' });
   }
   const convDiff = +(lg.taxa - fg.taxa).toFixed(1);
-  if (Math.abs(convDiff) > 2) ins.push({ t: convDiff > 0 ? 'g' : 'a', l: `Conversão ${convDiff > 0 ? 'Melhorou' : 'Caiu'} ${Math.abs(convDiff)} p.p.`, txt: `De ${fg.taxa}% para ${lg.taxa}%.`, sub: convDiff > 0 ? 'Fechamento evoluindo.' : 'Investigar mudanças no processo.' });
+  if (Math.abs(convDiff) > 2) ins.push({ t: convDiff > 0 ? 'g' : 'a', l: `Conversão ${convDiff > 0 ? 'Melhorou' : 'Caiu'} ${Math.abs(convDiff)} %`, txt: `De ${fg.taxa}% para ${lg.taxa}%.`, sub: convDiff > 0 ? 'Fechamento evoluindo.' : 'Investigar mudanças no processo.' });
   const perdDiff = lg.perdido - fg.perdido, perdPct = fg.perdido > 0 ? ((perdDiff / fg.perdido) * 100) : 0;
   if (Math.abs(perdPct) > 10) ins.push({ t: perdDiff > 0 ? 'a' : 'g', l: `Receita Perdida ${perdDiff > 0 ? 'Aumentou' : 'Reduziu'} ${Math.abs(perdPct).toFixed(0)}%`, txt: `De ${fmtK(fg.perdido)} para ${fmtK(lg.perdido)}.`, sub: perdDiff > 0 ? 'Reforçar follow-up.' : 'Follow-up funcionando.' });
   const ft = fg.aprovados > 0 ? fg.aprovado / fg.aprovados : 0, lt = lg.aprovados > 0 ? lg.aprovado / lg.aprovados : 0, tickPct = ft > 0 ? ((lt - ft) / ft * 100) : 0;
@@ -2379,8 +2651,8 @@ function generateCmpInsights(selected) {
     const fd = first_.dentistas.find(d => d.nome === nome), ld = last.dentistas.find(d => d.nome === nome);
     if (!fd || !ld || ld.total < 4) return;
     const td = +(ld.taxa - fd.taxa).toFixed(1);
-    if (td <= -15) ins.push({ t: 'a', l: `Queda: ${nome}`, txt: `Conversão de ${fd.taxa}% → ${ld.taxa}% (${td} p.p.).`, sub: 'Acompanhamento necessário.' });
-    else if (td >= 15) ins.push({ t: 'g', l: `Melhora: ${nome}`, txt: `Conversão de ${fd.taxa}% → ${ld.taxa}% (+${td} p.p.).`, sub: `Replicar para os ${vLabelP.toLowerCase()}.` });
+    if (td <= -15) ins.push({ t: 'a', l: `Queda: ${nome}`, txt: `Conversão de ${fd.taxa}% → ${ld.taxa}% (${td} %).`, sub: 'Acompanhamento necessário.' });
+    else if (td >= 15) ins.push({ t: 'g', l: `Melhora: ${nome}`, txt: `Conversão de ${fd.taxa}% → ${ld.taxa}% (+${td} %).`, sub: `Replicar para os ${vLabelP.toLowerCase()}.` });
   });
   if (ins.length === 0) ins.push({ t: 'i', l: 'Desempenho Estável', txt: 'Sem variação significativa.', sub: 'Adicione mais períodos para identificar tendências.' });
   return ins;
@@ -2399,37 +2671,205 @@ function setFinView(view, btn) {
 }
 
 function openFinPortal(arrowEl, ano) {
-  const portalId = 'fyd-' + ano;
+  const portalId = 'finportal-' + ano;
   if (_portalTarget === portalId) { closePortalDropdown(); return; }
   _portalTarget = portalId;
-  const y = YEARS[ano]; if (!y) return;
-  const miy = y.monthIndices.map(i => MONTHS[i]).filter(m => m.geral.hasDespesas || parsedExpenses[m.key]);
+
+  const mesesDoAno = getMesesFinanceirosPorAno(+ano);
   const portal = document.getElementById('dropPortal');
-  portal.innerHTML = miy.map(m => {
-    const mSel = _finView === 'month:' + m.key;
-    return `<button class="ydrop-item ${mSel ? 'active' : ''}" onclick="setFinView('month:${m.key}',null);closePortalDropdown()">${MONTHS_PT[m.mes]}</button>`;
+
+  portal.innerHTML = mesesDoAno.map(key => {
+    const m = getFinMesData(key);
+    const label = m ? MONTHS_PT[m.mes] : key;
+    const isActive = _finView === 'month:' + key;
+    return `<button class="ydrop-item ${isActive ? 'active' : ''}"
+      onclick="setFinView('month:${key}',null);closePortalDropdown()">
+      ${label}
+    </button>`;
   }).join('');
+
   const rect = arrowEl.getBoundingClientRect();
   portal.style.display = 'flex';
   portal.style.top = (rect.bottom + window.scrollY + 6) + 'px';
-  portal.style.left = (rect.left + window.scrollX - 100) + 'px';
+  portal.style.left = (rect.left + window.scrollX - 60) + 'px';
+}
+
+function openFinMesesPortal(arrowEl, ano) {
+  const portalId = 'finmes-' + ano;
+  if (_portalTarget === portalId) { closePortalDropdown(); return; }
+  _portalTarget = portalId;
+
+  const portal = document.getElementById('dropPortal');
+
+  function renderPortalMeses() {
+    const mesesDoAno = getMesesFinanceirosPorAno(+ano);
+    portal.innerHTML = mesesDoAno.map(key => {
+      const m = getFinMesData(key);
+      const label = m ? MONTHS_PT[m.mes] : key;
+      const ativo = _finMesesSelecionados.has(key);
+      return `<button class="ydrop-item ${ativo ? 'active' : ''}"
+        onclick="toggleFinMes('${key}');renderFinMesesSeletor();renderPortalMeses_${ano}()">
+        ${label}
+      </button>`;
+    }).join('');
+  }
+
+  // Expõe a função de re-render no escopo global para o onclick inline conseguir chamar
+  window['renderPortalMeses_' + ano] = renderPortalMeses;
+
+  const rect = arrowEl.getBoundingClientRect();
+  portal.style.display = 'flex';
+  portal.style.top = (rect.bottom + window.scrollY + 6) + 'px';
+  portal.style.left = (rect.left + window.scrollX - 60) + 'px';
+
+  renderPortalMeses();
+}
+
+// ═══════════════════════════════════════
+//  FINANCEIRO — HELPERS DE PERÍODO JUSTO
+// ═══════════════════════════════════════
+function getAnosComDadosFinanceiros() {
+  const anosSet = new Set();
+  MONTHS.forEach(m => anosSet.add(m.ano));
+  Object.keys(parsedExpenses).forEach(key => {
+    const ano = parseInt(key.split('-')[0]);
+    if (!isNaN(ano)) anosSet.add(ano);
+  });
+  return [...anosSet].sort((a, b) => a - b);
+}
+
+function getMesesFinanceirosPorAno(ano) {
+  const mesesSet = new Set();
+  MONTHS.filter(m => m.ano === ano).forEach(m => mesesSet.add(m.key));
+  Object.keys(parsedExpenses).forEach(key => {
+    if (key.startsWith(ano + '-')) mesesSet.add(key);
+  });
+  return [...mesesSet].sort();
+}
+
+function getFinMesData(key) {
+  const m = MONTHS.find(x => x.key === key);
+  if (m) return m;
+  const [ano, mes] = key.split('-');
+  return {
+    key,
+    periodo: MONTHS_PT[parseInt(mes) - 1] + ' ' + ano,
+    mes: parseInt(mes) - 1,
+    ano: parseInt(ano),
+    geral: {
+      aprovado: 0, despesas: parsedExpenses[key] || 0,
+      hasDespesas: true, margem: -100,
+      total: 0, aprovados: 0, vencidos: 0, cancelados: 0,
+      taxa: 0, orcado: 0, perdido: 0, canceladoVal: 0
+    },
+    dentistas: [], canais: [], cancelados: [], cancByDent: [], topVencidos: [], score: 0
+  };
+}
+
+function temFaturamentoReal() {
+  return Object.keys(parsedFaturamento).length > 0;
+}
+
+function getReceitaFinanceira(key) {
+  if (_finModoReceita === 'faturamento') {
+    if (parsedFaturamento[key] !== undefined) return parsedFaturamento[key];
+    return null; // sem dados de faturamento real para esta chave
+  }
+  // modo aprovados
+  const m = MONTHS.find(x => x.key === key);
+  if (m) return m.geral.aprovado;
+  return null; // sem dados de orçamentos para esta chave
+}
+
+function getFinMesDataComReceita(key) {
+  const m = getFinMesData(key);
+  if (!m) return null;
+
+  const clone = { ...m, geral: { ...m.geral } };
+  const receita = getReceitaFinanceira(key);
+
+  if (receita === null) {
+    // fonte selecionada não tem dados para este período
+    clone.geral.aprovado = 0;
+    clone.geral.margem = 0;
+    clone._semDados = true;
+    clone._fonteAusente = _finModoReceita === 'faturamento' ? 'faturamento real' : 'orçamentos aprovados';
+    return clone;
+  }
+
+  clone.geral.aprovado = receita;
+  const lucro = receita - clone.geral.despesas;
+  clone.geral.margem = receita > 0
+    ? +((lucro / receita) * 100).toFixed(1)
+    : (clone.geral.despesas > 0 ? -100 : 0);
+
+  return clone;
+}
+
+function getUltimoMesDoAno(ano) {
+  const meses = getMesesFinanceirosPorAno(ano);
+  if (!meses.length) return null;
+  const ultimo = meses[meses.length - 1];
+  return parseInt(ultimo.split('-')[1]);
+}
+
+function getMesesAnoAteMes(ano, atesMes) {
+  return getMesesFinanceirosPorAno(ano).filter(key => {
+    const mes = parseInt(key.split('-')[1]);
+    return mes <= atesMes;
+  });
+}
+
+function getPeriodosJustos(ano1, ano2) {
+  const ultimoMes1 = getUltimoMesDoAno(ano1);
+  const ultimoMes2 = getUltimoMesDoAno(ano2);
+  if (ultimoMes1 === null || ultimoMes2 === null) return null;
+  const corte = Math.min(ultimoMes1, ultimoMes2);
+  const precisaCorte = ultimoMes1 !== ultimoMes2;
+  const meses1 = getMesesAnoAteMes(ano1, corte);
+  const meses2 = getMesesAnoAteMes(ano2, corte);
+  return { corte, precisaCorte, meses1, meses2, labelCorte: MONTHS_PT[corte - 1], ano1, ano2 };
+}
+
+function agregaDadosFinanceiros(chavesMeses) {
+  // detecta melhor fonte disponível para o conjunto de meses
+  const temFaturamento = chavesMeses.some(k => parsedFaturamento[k] !== undefined);
+  const temOrcamentos = chavesMeses.some(k => MONTHS.find(m => m.key === k));
+
+  let fonte;
+  if (temFaturamento) fonte = 'faturamento';
+  else if (temOrcamentos) fonte = 'aprovados';
+  else fonte = null;
+
+  const fat = chavesMeses.reduce((s, key) => {
+    if (fonte === 'faturamento') return s + (parsedFaturamento[key] || 0);
+    const m = MONTHS.find(x => x.key === key);
+    return s + (m ? m.geral.aprovado : 0);
+  }, 0);
+
+  const desp = chavesMeses.reduce((s, key) => {
+    const m = getFinMesData(key);
+    return s + (m ? m.geral.despesas : 0);
+  }, 0);
+
+  const lucro = fat - desp;
+  const margem = fat > 0 ? +((lucro / fat) * 100).toFixed(1) : (desp > 0 ? -100 : 0);
+  const ratio = fat > 0 ? +((desp / fat) * 100).toFixed(1) : 0;
+  return { fat, desp, lucro, margem, ratio, fonte };
 }
 
 function renderDespesas() {
   const container = document.getElementById('finContent');
   if (!container) return;
 
-  const mesesComDesp = MONTHS.filter(m => m.geral.hasDespesas);
-  const temExpExternas = Object.keys(parsedExpenses).length > 0;
-  const temQualquerDesp = mesesComDesp.length > 0 || temExpExternas;
+  const anosDisponiveis = getAnosComDadosFinanceiros();
+  const temQualquerDesp = anosDisponiveis.some(ano => getMesesFinanceirosPorAno(ano).length > 0);
 
   if (!temQualquerDesp) {
     container.innerHTML = `
       <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:60px 20px;text-align:center">
         <div style="font-size:48px;margin-bottom:20px">💰</div>
-        <div style="font-size:18px;font-weight:700;color:var(--text);margin-bottom:10px">
-          Nenhuma planilha de despesas carregada
-        </div>
+        <div style="font-size:18px;font-weight:700;color:var(--text);margin-bottom:10px">Nenhuma planilha de despesas carregada</div>
         <div style="font-size:14px;color:var(--muted);max-width:480px;line-height:1.7;margin-bottom:24px">
           Para visualizar a análise financeira completa, faça upload de uma planilha de despesas na tela inicial.
         </div>
@@ -2440,52 +2880,177 @@ function renderDespesas() {
     return;
   }
 
-  const anos = Object.keys(YEARS).map(Number).sort((a, b) => a - b);
-  if (!_finView && anos.length > 0) _finView = 'year:' + anos[anos.length - 1];
+  if (!_finView && anosDisponiveis.length > 0) {
+    _finView = 'year:' + anosDisponiveis[anosDisponiveis.length - 1];
+  }
 
-  const tabsHtml = anos.map(ano => {
-    const mesesDoAno = MONTHS.filter(m => m.ano === ano && (m.geral.hasDespesas || parsedExpenses[m.key]));
+  const tabsHtml = anosDisponiveis.map(ano => {
+    const mesesDoAno = getMesesFinanceirosPorAno(ano);
     if (!mesesDoAno.length) return '';
     const isActive = _finView === 'year:' + ano;
     return `<div class="period-group">
       <button class="year-chip ${isActive ? 'active' : ''}" data-view="year:${ano}" onclick="setFinView('year:${ano}',this)">${ano}
-        ${mesesDoAno.length > 1 ? `<span class="year-arrow" onclick="event.stopPropagation();openFinPortal(this,'${ano}')">▾</span>` : ''}
+        ${mesesDoAno.length > 1
+        ? `<span class="year-arrow" onclick="event.stopPropagation();openFinPortal(this,'${ano}')">▾</span>`
+        : ''}
       </button>
     </div>`;
   }).join('');
 
-  let mesesView = [];
+  let mesesViewKeys = [];
   let tituloView = '';
+  let isYearView = false;
+  let anoAtivo = null;
+
   if (_finView && _finView.startsWith('year:')) {
-    const ano = +_finView.replace('year:', '');
-    mesesView = MONTHS.filter(m => m.ano === ano && (m.geral.hasDespesas || parsedExpenses[m.key]));
-    tituloView = String(ano);
+    anoAtivo = +_finView.replace('year:', '');
+    isYearView = true;
+    // SEM corte — mostra o ano completo na visão geral
+    mesesViewKeys = getMesesFinanceirosPorAno(anoAtivo);
+    tituloView = String(anoAtivo);
   } else if (_finView && _finView.startsWith('month:')) {
     const key = _finView.replace('month:', '');
-    const m = MONTHS.find(x => x.key === key);
-    if (m) mesesView = [m];
-    tituloView = m ? m.periodo : '';
+    mesesViewKeys = [key];
+    const m = getFinMesData(key);
+    tituloView = m ? m.periodo : key;
   }
 
+  const mesesView = mesesViewKeys.map(k => getFinMesDataComReceita(k)).filter(Boolean);
+
   if (mesesView.length === 0) {
-    container.innerHTML = `<div id="finPeriodTabs" class="month-tabs" style="margin-bottom:20px">${tabsHtml}</div>
+    container.innerHTML = `
+      <div id="finPeriodTabs" class="month-tabs" style="margin-bottom:20px">${tabsHtml}</div>
       <div style="color:var(--muted);text-align:center;padding:40px">Nenhum dado de despesas neste período.</div>`;
     return;
   }
 
+  const todosSemDados = mesesView.every(m => m._semDados);
+  const algunsSemDados = !todosSemDados && mesesView.some(m => m._semDados);
+  const fonteAusente = mesesView.find(m => m._semDados)?._fonteAusente || '';
+
+  const alertaSemDadosHtml = todosSemDados ? `
+    <div style="background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.3);
+      border-radius:10px;padding:16px 20px;margin-bottom:20px;
+      display:flex;align-items:flex-start;gap:12px">
+      <span style="font-size:20px">⚠️</span>
+      <div>
+        <div style="font-weight:700;color:var(--red);margin-bottom:4px">
+          Nenhum dado de ${fonteAusente} carregado para este período
+        </div>
+        <div style="font-size:12px;color:var(--muted);line-height:1.6">
+          ${_finModoReceita === 'faturamento'
+            ? 'Você está visualizando <strong style="color:var(--text)">Faturamento Real</strong> mas não carregou nenhuma planilha de faturamento para este período. Faça upload da planilha de faturamento ou mude para <strong style="color:var(--text)">Orçamentos Aprovados</strong>.'
+            : 'Você está visualizando <strong style="color:var(--text)">Orçamentos Aprovados</strong> mas não há planilha de orçamentos carregada para este período. Faça upload da planilha de orçamentos ou mude para <strong style="color:var(--text)">Faturamento Real</strong>.'}
+        </div>
+      </div>
+    </div>` : algunsSemDados ? `
+    <div style="background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.3);
+      border-radius:10px;padding:12px 16px;margin-bottom:20px;
+      display:flex;align-items:center;gap:10px">
+      <span style="font-size:16px">⚠️</span>
+      <div style="font-size:12px;color:var(--yellow);line-height:1.6">
+        Alguns meses não possuem dados de <strong>${fonteAusente}</strong> e aparecem zerados.
+        Faça upload das planilhas faltantes para completar a análise.
+      </div>
+    </div>` : '';
+
   const fatTotal = mesesView.reduce((s, m) => s + m.geral.aprovado, 0);
   const despTotal = mesesView.reduce((s, m) => s + m.geral.despesas, 0);
   const lucroTotal = fatTotal - despTotal;
-  const margemTotal = fatTotal > 0 ? +((lucroTotal / fatTotal) * 100).toFixed(1) : 0;
+  const margemTotal = fatTotal > 0 ? +((lucroTotal / fatTotal) * 100).toFixed(1) : (despTotal > 0 ? -100 : 0);
   const ratioDespFat = fatTotal > 0 ? +((despTotal / fatTotal) * 100).toFixed(1) : 0;
-  const marColor = margemTotal >= (_benchmarks.margemIdeal || 20) ? 'var(--green)' : margemTotal >= (_benchmarks.margemBaixa || 10) ? 'var(--yellow)' : margemTotal >= 0 ? 'var(--orange)' : 'var(--red)';
+  const marColor = margemTotal >= (_benchmarks.margemIdeal || 20) ? 'var(--green)'
+    : margemTotal >= (_benchmarks.margemBaixa || 10) ? 'var(--yellow)'
+      : margemTotal >= 0 ? 'var(--orange)' : 'var(--red)';
+
+  let avisoCorteHtml = '';
+
+  const pLabel = CFG.proposta || 'Orçamento';
+  const temFat = temFaturamentoReal();
+
+  // Toggle só aparece se o usuário carregou planilha de faturamento real
+  const toggleReceitaHtml = temFat ? `
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:20px;flex-wrap:wrap">
+      <span style="font-size:12px;color:var(--muted);font-weight:600">Fonte da receita:</span>
+      <div style="display:flex;gap:4px;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:3px">
+        <button
+          onclick="setFinModoReceita('aprovados')"
+          style="padding:6px 14px;border-radius:6px;border:none;cursor:pointer;font-size:12px;font-weight:600;transition:.15s;
+            background:${_finModoReceita === 'aprovados' ? 'var(--accent)' : 'transparent'};
+            color:${_finModoReceita === 'aprovados' ? '#fff' : 'var(--muted)'}">
+          ${pLabel}s Aprovados
+        </button>
+        <button
+          onclick="setFinModoReceita('faturamento')"
+          style="padding:6px 14px;border-radius:6px;border:none;cursor:pointer;font-size:12px;font-weight:600;transition:.15s;
+            background:${_finModoReceita === 'faturamento' ? 'var(--accent)' : 'transparent'};
+            color:${_finModoReceita === 'faturamento' ? '#fff' : 'var(--muted)'}">
+          Faturamento Real
+        </button>
+      </div>
+    </div>` : '';
+
+  // detecta se a fonte selecionada tem dados no período atual
+  const temDadosFonteAtual = _finModoReceita === 'faturamento'
+    ? mesesViewKeys.some(k => parsedFaturamento[k] !== undefined)
+    : mesesViewKeys.some(k => MONTHS.find(m => m.key === k));
+
+  const alertaFonteHtml = !temDadosFonteAtual ? `
+    <div style="background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.3);
+      border-radius:10px;padding:14px 18px;margin-bottom:16px;
+      display:flex;align-items:flex-start;gap:12px">
+      <span style="font-size:20px">⚠️</span>
+      <div>
+        <div style="font-weight:700;color:var(--red);margin-bottom:4px">
+          Nenhum dado de ${_finModoReceita === 'faturamento' ? 'faturamento real' : 'orçamentos aprovados'} para este período
+        </div>
+        <div style="font-size:12px;color:var(--muted);line-height:1.7">
+          ${_finModoReceita === 'faturamento'
+            ? `Você selecionou <strong style="color:var(--text)">Faturamento Real</strong> mas não carregou nenhuma planilha de faturamento para <strong style="color:var(--text)">${tituloView}</strong>.<br>
+               Faça upload da planilha de faturamento ou mude para <strong style="color:var(--text)">Total Líquidos Aprovados</strong>.`
+            : `Você selecionou <strong style="color:var(--text)">Total Líquidos Aprovados</strong> mas não há planilha de orçamentos carregada para <strong style="color:var(--text)">${tituloView}</strong>.<br>
+               Faça upload da planilha de orçamentos ou mude para <strong style="color:var(--text)">Faturamento Real</strong>.`}
+        </div>
+      </div>
+    </div>` : '';
+
+  // Badge mostra sempre qual fonte está sendo usada
+  const badgeReceitaHtml = !temDadosFonteAtual ? '' : `
+    <div style="font-size:11px;color:var(--muted2);margin-bottom:16px;display:flex;align-items:center;gap:6px">
+      <span>📊</span>
+      <span>Receita baseada em
+        <strong style="color:var(--text)">
+          ${_finModoReceita === 'faturamento' && temFat
+            ? 'faturamento real (caixa)'
+            : `${pLabel.toLowerCase()}s aprovados`}
+        </strong>
+      </span>
+    </div>`;
 
   const kpisFinHtml = `
     <div class="kpi-grid" style="margin-bottom:24px">
-      <div class="kpi" style="--kc:var(--green)"><div class="kpi-lbl">Receita Total</div><div class="kpi-val">${fmtK(fatTotal)}</div><div class="kpi-sub">${tituloView}</div></div>
-      <div class="kpi" style="--kc:var(--red)"><div class="kpi-lbl">Despesas Totais</div><div class="kpi-val">${fmtK(despTotal)}</div><div class="kpi-sub">${ratioDespFat}% da receita</div></div>
-      <div class="kpi" style="--kc:${lucroTotal >= 0 ? 'var(--green)' : 'var(--red)'}"><div class="kpi-lbl">Lucro Líquido</div><div class="kpi-val">${fmtK(lucroTotal)}</div><div class="kpi-sub">${lucroTotal >= 0 ? 'positivo' : 'prejuízo'}</div></div>
-      <div class="kpi" style="--kc:${marColor}"><div class="kpi-lbl">Margem Líquida</div><div class="kpi-val" style="color:${marColor}">${margemTotal}%</div><div class="kpi-sub">${margemTotal >= (_benchmarks.margemIdeal || 20) ? 'excelente' : margemTotal >= (_benchmarks.margemBaixa || 10) ? 'saudável' : margemTotal >= 0 ? 'baixa' : 'negativa'}</div></div>
+      <div class="kpi" style="--kc:var(--green)">
+        <div class="kpi-lbl">Receita Total</div>
+        <div class="kpi-val">${fmtK(fatTotal)}</div>
+        <div class="kpi-sub">${tituloView}</div>
+      </div>
+      <div class="kpi" style="--kc:var(--red)">
+        <div class="kpi-lbl">Despesas Totais</div>
+        <div class="kpi-val">${fmtK(despTotal)}</div>
+        <div class="kpi-sub">${ratioDespFat}% da receita</div>
+      </div>
+      <div class="kpi" style="--kc:${lucroTotal >= 0 ? 'var(--green)' : 'var(--red)'}">
+        <div class="kpi-lbl">Lucro Líquido</div>
+        <div class="kpi-val">${fmtK(lucroTotal)}</div>
+        <div class="kpi-sub">${lucroTotal >= 0 ? 'positivo' : 'prejuízo'}</div>
+      </div>
+      <div class="kpi" style="--kc:${marColor}">
+        <div class="kpi-lbl">Margem Líquida</div>
+        <div class="kpi-val" style="color:${marColor}">${margemTotal}%</div>
+        <div class="kpi-sub">${margemTotal >= (_benchmarks.margemIdeal || 20) ? 'excelente'
+      : margemTotal >= (_benchmarks.margemBaixa || 10) ? 'saudável'
+        : margemTotal >= 0 ? 'baixa' : 'negativa'}</div>
+      </div>
     </div>`;
 
   let barrasHtml = '';
@@ -2493,11 +3058,13 @@ function renderDespesas() {
     const maxFat = Math.max(...mesesView.map(m => m.geral.aprovado), 1);
     barrasHtml = `
       <div class="card" style="margin-bottom:20px">
-        <div class="card-title"><span class="dot" style="background:var(--green)"></span> Receita vs Despesas por Mês</div>
+        <div class="card-title"><span class="dot" style="background:var(--green)"></span>Receita vs Despesas por Mês</div>
         ${mesesView.map(m => {
       const fat = m.geral.aprovado, desp = m.geral.despesas, lucro = fat - desp;
-      const mar = fat > 0 ? +((lucro / fat) * 100).toFixed(1) : 0;
-      const mc = mar >= (_benchmarks.margemIdeal || 20) ? 'var(--green)' : mar >= (_benchmarks.margemBaixa || 10) ? 'var(--yellow)' : mar >= 0 ? 'var(--orange)' : 'var(--red)';
+      const mar = fat > 0 ? +((lucro / fat) * 100).toFixed(1) : (desp > 0 ? -100 : 0);
+      const mc = mar >= (_benchmarks.margemIdeal || 20) ? 'var(--green)'
+        : mar >= (_benchmarks.margemBaixa || 10) ? 'var(--yellow)'
+          : mar >= 0 ? 'var(--orange)' : 'var(--red)';
       return `<div class="bar-item" style="margin-bottom:10px">
             <div class="bar-lbl"><span>${m.periodo}</span><span style="color:${mc}">Margem: ${mar}%</span></div>
             <div style="display:flex;gap:4px;margin-top:4px">
@@ -2515,44 +3082,59 @@ function renderDespesas() {
       </div>`;
   }
 
-  const comparativoMesesHtml = `
-    <div class="card full" style="margin-bottom:20px">
-      <div class="card-title">
-        <span class="dot" style="background:var(--accent)"></span>
-        Comparação entre Meses
-      </div>
-      <div style="margin-bottom:14px;font-size:12px;color:var(--muted)">Selecione dois ou mais meses para comparar:</div>
-      <div id="finMesesSeletor" class="fin-comparativo-seletor"></div>
-      <div id="finComparativoResultado"></div>
-    </div>`;
-
   const insFinanceiros = generateFinancialInsights(mesesView);
-  insFinanceiros.sort((a, b) => ({ 'a': 0, 'o': 1, 'w': 2, 'i': 3, 'g': 4 }[a.t] || 9) - ({ 'a': 0, 'o': 1, 'w': 2, 'i': 3, 'g': 4 }[b.t] || 9));
+  insFinanceiros.sort((a, b) =>
+    ({ 'a': 0, 'o': 1, 'w': 2, 'i': 3, 'g': 4 }[a.t] || 9) -
+    ({ 'a': 0, 'o': 1, 'w': 2, 'i': 3, 'g': 4 }[b.t] || 9)
+  );
   const insHtml = insFinanceiros.length > 0
-    ? insFinanceiros.map(i => `<div class="ins"><div class="ins-ico ico-${i.t}">${i.i}</div><div><div class="ins-type tp-${i.t}">${i.l}</div><div class="ins-txt">${i.txt}</div><div class="ins-sub">${i.sub}</div></div></div>`).join('')
+    ? insFinanceiros.map(i =>
+      `<div class="ins">
+          <div class="ins-ico ico-${i.t}">${i.i}</div>
+          <div>
+            <div class="ins-type tp-${i.t}">${i.l}</div>
+            <div class="ins-txt">${i.txt}</div>
+            <div class="ins-sub">${i.sub}</div>
+          </div>
+        </div>`).join('')
     : '<div style="color:var(--muted);font-size:13px">Carregue mais meses para gerar insights.</div>';
 
-  const yearCompareHtml = anos.length >= 2 ? `
+  const yearCompareHtml = anosDisponiveis.length >= 2 ? `
     <div id="finYearCompareWrap" style="margin-top:24px">
       <div class="sec" style="margin-bottom:12px">Comparativo Entre Anos</div>
       <div class="kpi-grid" id="finYearCompareKpis" style="margin-bottom:20px"></div>
       <div class="grid-2" style="margin-bottom:20px">
-        <div class="card"><div class="card-title">Crescimento % por Categoria</div><div style="height:220px"><canvas id="finYearGrowthChart"></canvas></div></div>
-        <div class="card"><div class="card-title">Receita, Despesas e Lucro por Ano</div><div style="height:220px"><canvas id="finYearLucroChart"></canvas></div></div>
+        <div class="card">
+          <div class="card-title">Crescimento % por Categoria</div>
+          <div style="height:220px"><canvas id="finYearGrowthChart"></canvas></div>
+        </div>
+        <div class="card">
+          <div class="card-title">Receita, Despesas e Lucro por Ano</div>
+          <div style="height:220px"><canvas id="finYearLucroChart"></canvas></div>
+        </div>
       </div>
       <div id="finYearCompareIns"></div>
-    </div>`: '';
+    </div>` : '';
 
   container.innerHTML = `
     <div id="finPeriodTabs" class="month-tabs" style="margin-bottom:20px">${tabsHtml}</div>
+    ${avisoCorteHtml}
     <div class="sec" style="margin-bottom:12px">Visão Financeira — ${tituloView}</div>
+    ${toggleReceitaHtml}
+    ${alertaFonteHtml}
+    ${badgeReceitaHtml}
     ${kpisFinHtml}
     ${barrasHtml}
     <div class="card" style="margin-bottom:20px">
-      <div class="card-title"><span class="dot" style="background:var(--accent)"></span> Evolução Financeira</div>
+      <div class="card-title"><span class="dot" style="background:var(--accent)"></span>Evolução Financeira</div>
       <div style="height:280px"><canvas id="despChart"></canvas></div>
     </div>
-    ${comparativoMesesHtml}
+    <div class="card full" style="margin-bottom:20px">
+      <div class="card-title"><span class="dot" style="background:var(--accent)"></span>Comparação entre Meses</div>
+      <div style="margin-bottom:14px;font-size:12px;color:var(--muted)">Selecione meses para comparar (use os dropdowns por ano):</div>
+      <div id="finMesesSeletor" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px"></div>
+      <div id="finComparativoResultado"></div>
+    </div>
     <div class="sec" style="margin-bottom:12px;margin-top:4px">Análise Financeira</div>
     <div class="ins-grid" style="margin-bottom:24px">${insHtml}</div>
     ${yearCompareHtml}`;
@@ -2561,7 +3143,6 @@ function renderDespesas() {
   const despCanvas = document.getElementById('despChart');
   if (despCanvas && mesesView.length >= 1) {
     const isMonthView = mesesView.length === 1;
-    const chartLabels = isMonthView ? ['Receita', 'Despesas', 'Lucro'] : mesesView.map(m => m.periodo);
     if (isMonthView) {
       const fat = mesesView[0].geral.aprovado;
       const desp = mesesView[0].geral.despesas;
@@ -2569,7 +3150,7 @@ function renderDespesas() {
       _despChartInst = new Chart(despCanvas, {
         type: 'bar',
         data: {
-          labels: chartLabels,
+          labels: ['Receita', 'Despesas', 'Lucro'],
           datasets: [{
             label: 'Valor',
             data: [fat, desp, lucro],
@@ -2580,7 +3161,10 @@ function renderDespesas() {
         },
         options: {
           responsive: true, maintainAspectRatio: false,
-          plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ` ${fmtK(ctx.raw)}` } } },
+          plugins: {
+            legend: { display: false },
+            tooltip: { callbacks: { label: ctx => ` ${fmtK(ctx.raw)}` } }
+          },
           scales: {
             x: { ticks: { color: '#94A3B8', font: { size: 12, weight: '600' } }, grid: { display: false } },
             y: { ticks: { color: '#64748B', font: { size: 10 }, callback: v => fmtK(v) }, grid: { color: 'rgba(255,255,255,.06)' } }
@@ -2591,7 +3175,7 @@ function renderDespesas() {
       _despChartInst = new Chart(despCanvas, {
         type: 'bar',
         data: {
-          labels: chartLabels,
+          labels: mesesView.map(m => m.periodo),
           datasets: [
             { label: 'Receita', data: mesesView.map(m => m.geral.aprovado), backgroundColor: 'rgba(52,211,153,.7)', borderColor: '#34D399', borderWidth: 1.5, borderRadius: 5 },
             { label: 'Despesas', data: mesesView.map(m => m.geral.despesas), backgroundColor: 'rgba(248,113,113,.65)', borderColor: '#F87171', borderWidth: 1.5, borderRadius: 5 },
@@ -2601,7 +3185,10 @@ function renderDespesas() {
         options: {
           responsive: true, maintainAspectRatio: false,
           interaction: { mode: 'index', intersect: false },
-          plugins: { legend: { labels: { color: '#94A3B8', font: { size: 11 } } }, tooltip: { callbacks: { label: ctx => ` ${ctx.dataset.label}: ${fmtK(ctx.raw)}` } } },
+          plugins: {
+            legend: { labels: { color: '#94A3B8', font: { size: 11 } } },
+            tooltip: { callbacks: { label: ctx => ` ${ctx.dataset.label}: ${fmtK(ctx.raw)}` } }
+          },
           scales: {
             x: { ticks: { color: '#64748B', font: { size: 10 } }, grid: { color: 'rgba(255,255,255,.04)' } },
             y: { ticks: { color: '#64748B', font: { size: 10 }, callback: v => fmtK(v) }, grid: { color: 'rgba(255,255,255,.06)' } }
@@ -2613,25 +3200,47 @@ function renderDespesas() {
 
   renderFinMesesSeletor();
   renderFinComparativo();
-  if (anos.length >= 2) renderFinYearCompare(anos, marColor);
+  if (anosDisponiveis.length >= 2) renderFinYearCompare(anosDisponiveis, marColor);
+}
+
+function setFinModoReceita(modo) {
+  _finModoReceita = modo;
+  renderDespesas();
 }
 
 function renderFinMesesSeletor() {
   const el = document.getElementById('finMesesSeletor');
   if (!el) return;
-  const mesesDisp = MONTHS.filter(m => m.geral.hasDespesas || parsedExpenses[m.key]).map(m => m.key).sort();
-  el.innerHTML = mesesDisp.map(key => {
-    const m = MONTHS.find(x => x.key === key);
-    const label = m ? m.periodo : key;
-    const ativo = _finMesesSelecionados.has(key);
-    return `<button
-      onclick="toggleFinMes('${key}')"
-      style="padding:7px 14px;border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;
-        border:1px solid ${ativo ? 'var(--accent)' : 'var(--border)'};
-        background:${ativo ? 'rgba(79,156,249,.15)' : 'var(--surface2)'};
-        color:${ativo ? 'var(--accent)' : 'var(--muted)'};transition:.15s;"
-    >${label}</button>`;
+
+  const anosDisponiveis = getAnosComDadosFinanceiros();
+
+  el.innerHTML = anosDisponiveis.map(ano => {
+    const mesesDoAno = getMesesFinanceirosPorAno(+ano);
+    if (!mesesDoAno.length) return '';
+    const todosSelecionados = mesesDoAno.every(k => _finMesesSelecionados.has(k));
+    const algumSelecionado = mesesDoAno.some(k => _finMesesSelecionados.has(k));
+
+    return `<div class="period-group">
+      <button class="year-chip ${todosSelecionados ? 'active' : algumSelecionado ? 'active' : ''}"
+        onclick="toggleFinAnoCompleto('${ano}')">
+        ${ano}
+        <span class="year-arrow"
+          onclick="event.stopPropagation();openFinMesesPortal(this,'${ano}')">▾</span>
+      </button>
+    </div>`;
   }).join('');
+}
+
+function toggleFinAnoCompleto(ano) {
+  const mesesDoAno = getMesesFinanceirosPorAno(+ano);
+  const todosSelecionados = mesesDoAno.every(k => _finMesesSelecionados.has(k));
+  if (todosSelecionados) {
+    mesesDoAno.forEach(k => _finMesesSelecionados.delete(k));
+  } else {
+    mesesDoAno.forEach(k => _finMesesSelecionados.add(k));
+  }
+  renderFinMesesSeletor();
+  renderFinComparativo();
 }
 
 function toggleFinMes(key) {
@@ -2644,25 +3253,88 @@ function toggleFinMes(key) {
 function renderFinComparativo() {
   const el = document.getElementById('finComparativoResultado');
   if (!el) return;
+
   const selecionados = [..._finMesesSelecionados].sort();
-  if (selecionados.length < 2) {
-    el.innerHTML = `<div style="color:var(--muted);font-size:13px;text-align:center;padding:30px 0">Selecione ao menos 2 meses para ver a comparação.</div>`;
+
+  if (selecionados.length === 0) {
+    el.innerHTML = `<div style="color:var(--muted);font-size:13px;text-align:center;padding:30px 0">Selecione anos ou meses acima para comparar.</div>`;
     return;
   }
-  const dados = selecionados.map(key => {
-    const m = MONTHS.find(x => x.key === key);
-    const fat = m ? m.geral.aprovado : 0;
+
+  if (selecionados.length === 1) {
+    el.innerHTML = `<div style="color:var(--muted);font-size:13px;text-align:center;padding:30px 0">Selecione ao menos 2 períodos para ver a comparação.</div>`;
+    return;
+  }
+
+  const anosDisponiveis = getAnosComDadosFinanceiros();
+  let avisoCorte = '';
+  let dadosParaComparar = selecionados;
+
+  if (anosDisponiveis.length >= 2) {
+    const anosComTodosOsMeses = anosDisponiveis.filter(ano => {
+      const mesesDoAno = getMesesFinanceirosPorAno(ano);
+      return mesesDoAno.every(k => _finMesesSelecionados.has(k)) && mesesDoAno.length > 0;
+    });
+
+    if (anosComTodosOsMeses.length >= 2) {
+      const ano1 = Math.min(...anosComTodosOsMeses);
+      const ano2 = Math.max(...anosComTodosOsMeses);
+      const periodos = getPeriodosJustos(ano1, ano2);
+
+      if (periodos && periodos.precisaCorte) {
+        dadosParaComparar = [...periodos.meses1, ...periodos.meses2].sort();
+        avisoCorte = `
+          <div style="background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.25);
+            border-radius:10px;padding:12px 16px;margin-bottom:16px;font-size:12px;
+            color:var(--yellow);display:flex;align-items:center;gap:10px">
+            <span style="font-size:16px">⚠️</span>
+            <span>Comparação justa: exibindo <strong>${ano1} Jan→${periodos.labelCorte}</strong>
+            vs <strong>${ano2} Jan→${periodos.labelCorte}</strong>
+            (${ano2} tem dados até ${periodos.labelCorte}).</span>
+          </div>`;
+      }
+    }
+  }
+
+  const dados = dadosParaComparar.map(key => {
+    const m = getFinMesData(key);
+    const temFat = parsedFaturamento[key] !== undefined;
+    const temOrc = !!MONTHS.find(x => x.key === key);
+    const fonte = temFat ? 'faturamento' : temOrc ? 'aprovados' : null;
+    const fat = temFat ? parsedFaturamento[key] : (temOrc ? (MONTHS.find(x => x.key === key)?.geral.aprovado || 0) : 0);
     const desp = m ? m.geral.despesas : 0;
     const lucro = fat - desp;
-    const margem = fat > 0 ? +(lucro / fat * 100).toFixed(1) : 0;
+    const margem = fat > 0 ? +(lucro / fat * 100).toFixed(1) : (desp > 0 ? -100 : 0);
     const label = m ? m.periodo : key;
-    return { key, label, fat, desp, lucro, margem };
+    return { key, label, fat, desp, lucro, margem, fonte };
   });
-  let html = `
+
+  // alerta fontes mistas
+  const fontesUsadasComp = [...new Set(dados.map(d => d.fonte).filter(Boolean))];
+  const fontesMistasComp = fontesUsadasComp.length > 1;
+  if (fontesMistasComp) {
+    avisoCorte += `
+      <div style="background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.3);
+        border-radius:10px;padding:12px 16px;margin-bottom:16px;
+        display:flex;align-items:flex-start;gap:10px">
+        <span style="font-size:18px">⚠️</span>
+        <div style="font-size:12px;color:var(--yellow);line-height:1.6">
+          <strong>Atenção: fontes de dados diferentes entre os períodos.</strong><br>
+          ${dados.map(d => `<strong>${d.label}</strong>: ${d.fonte === 'faturamento' ? 'faturamento real (caixa)' : d.fonte === 'aprovados' ? 'orçamentos aprovados' : 'sem dados'}`).join(' · ')}<br>
+          A comparação pode não ser precisa pois as fontes são distintas.
+        </div>
+      </div>`;
+  }
+
+  let html = avisoCorte;
+
+  html += `
     <div style="overflow-x:auto;margin-bottom:20px">
       <table class="tbl" style="min-width:500px">
         <thead>
-          <tr><th>Mês</th><th>Faturamento</th><th>Despesas</th><th>Lucro Líquido</th><th>Margem</th></tr>
+          <tr>
+            <th>Período</th><th>Faturamento</th><th>Despesas</th><th>Lucro Líquido</th><th>Margem</th>
+          </tr>
         </thead>
         <tbody>
           ${dados.map(d => `
@@ -2671,18 +3343,24 @@ function renderFinComparativo() {
               <td style="color:var(--green)">${fmtK(d.fat)}</td>
               <td style="color:var(--red)">${fmtK(d.desp)}</td>
               <td style="color:${d.lucro >= 0 ? 'var(--green)' : 'var(--red)'}">${fmtK(d.lucro)}</td>
-              <td>${taxaBadge(d.margem)}</td>
+              <td>
+                <span class="badge ${d.margem >= (_benchmarks.margemIdeal || 20) ? 'green'
+      : d.margem >= (_benchmarks.margemBaixa || 10) ? 'warn' : 'bad'}">
+                  ${d.margem}%
+                </span>
+              </td>
             </tr>`).join('')}
         </tbody>
       </table>
     </div>`;
+
   if (dados.length >= 2) {
     html += `<div style="display:flex;flex-wrap:wrap;gap:12px;margin-top:4px">`;
     for (let i = 1; i < dados.length; i++) {
       const ant = dados[i - 1], atual = dados[i];
       const varFat = ant.fat > 0 ? +((atual.fat - ant.fat) / ant.fat * 100).toFixed(1) : null;
       const varDesp = ant.desp > 0 ? +((atual.desp - ant.desp) / ant.desp * 100).toFixed(1) : null;
-      const varMarg = ant.margem !== 0 ? +((atual.margem - ant.margem)).toFixed(1) : null;
+      const varMarg = +(atual.margem - ant.margem).toFixed(1);
       const seta = (v, inverso = false) => {
         if (v === null) return '—';
         const positivo = inverso ? (v < 0) : (v > 0);
@@ -2697,9 +3375,9 @@ function renderFinComparativo() {
             <div style="display:flex;justify-content:space-between;font-size:13px"><span style="color:var(--muted2)">Faturamento</span>${seta(varFat)}</div>
             <div style="display:flex;justify-content:space-between;font-size:13px"><span style="color:var(--muted2)">Despesas</span>${seta(varDesp, true)}</div>
             <div style="display:flex;justify-content:space-between;font-size:13px">
-              <span style="color:var(--muted2)">Margem de Lucro</span>
-              <span style="font-weight:700;color:${varMarg !== null && varMarg >= 0 ? 'var(--green)' : 'var(--red)'}">
-                ${varMarg !== null ? (varMarg >= 0 ? '↑ +' : ' ↓ ') + Math.abs(varMarg) + 'pp' : '—'}
+              <span style="color:var(--muted2)">Margem</span>
+              <span style="font-weight:700;color:${varMarg >= 0 ? 'var(--green)' : 'var(--red)'}">
+                ${varMarg >= 0 ? '↑ +' : '↓ '}${Math.abs(varMarg)}%
               </span>
             </div>
           </div>
@@ -2707,6 +3385,7 @@ function renderFinComparativo() {
     }
     html += `</div>`;
   }
+
   el.innerHTML = html;
 }
 
@@ -2716,58 +3395,119 @@ function renderFinComparativo() {
 function renderFinYearCompare(anos, marColor) {
   const wrap = document.getElementById('finYearCompareWrap');
   if (!wrap) return;
-  const anosComDesp = anos.filter(ano => MONTHS.some(m => m.ano === ano && (m.geral.hasDespesas || parsedExpenses[m.key])));
+  const anosComDesp = anos.filter(ano => getMesesFinanceirosPorAno(ano).length > 0);
   if (anosComDesp.length < 2) { wrap.style.display = 'none'; return; }
   wrap.style.display = 'block';
+
+  const ano1 = anosComDesp[anosComDesp.length - 2];
+  const ano2 = anosComDesp[anosComDesp.length - 1];
+  const periodos = getPeriodosJustos(ano1, ano2);
+
   const dadosPorAno = anosComDesp.map(ano => {
-    const meses = MONTHS.filter(m => m.ano === ano && (m.geral.hasDespesas || parsedExpenses[m.key]));
-    const fat = meses.reduce((s, m) => s + m.geral.aprovado, 0);
-    const desp = meses.reduce((s, m) => s + m.geral.despesas, 0);
-    const lucro = fat - desp;
-    const mar = fat > 0 ? +((lucro / fat) * 100).toFixed(1) : 0;
-    return { ano, fat, desp, lucro, mar, meses: meses.length };
+    let chaves;
+    if (periodos && periodos.precisaCorte) {
+      chaves = ano === ano1 ? periodos.meses1 : ano === ano2 ? periodos.meses2 : getMesesFinanceirosPorAno(ano);
+    } else {
+      chaves = getMesesFinanceirosPorAno(ano);
+    }
+    const { fat, desp, lucro, margem, fonte } = agregaDadosFinanceiros(chaves);
+    return { ano, fat, desp, lucro, mar: margem, meses: chaves.length, fonte };
   });
+
+  // detecta se anos usam fontes diferentes
+  const fontesUsadas = [...new Set(dadosPorAno.map(d => d.fonte).filter(Boolean))];
+  const fontesMistas = fontesUsadas.length > 1;
+  const avisoFontesMistasHtml = fontesMistas ? `
+    <div style="background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.3);
+      border-radius:10px;padding:12px 16px;margin-bottom:16px;
+      display:flex;align-items:flex-start;gap:10px">
+      <span style="font-size:18px">⚠️</span>
+      <div style="font-size:12px;color:var(--yellow);line-height:1.6">
+        <strong>Atenção: fontes de dados diferentes entre os anos.</strong><br>
+        ${dadosPorAno.map(d => `<strong>${d.ano}</strong>: ${d.fonte === 'faturamento' ? 'faturamento real (caixa)' : 'orçamentos aprovados'}`).join(' · ')}<br>
+        A comparação pode não ser precisa pois as fontes são distintas.
+      </div>
+    </div>` : '';
+
+    const wrapAviso = document.getElementById('finYearCompareWrap');
+    if (wrapAviso && fontesMistas) {
+      const avisoEl = document.createElement('div');
+      avisoEl.innerHTML = avisoFontesMistasHtml;
+      const primeiro = wrapAviso.querySelector('#finYearCompareKpis');
+      if (primeiro) wrapAviso.insertBefore(avisoEl.firstElementChild, primeiro);
+    }
+
+  if (periodos && periodos.precisaCorte) {
+    const avisoEl = document.createElement('div');
+    avisoEl.style.cssText = `background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.25);
+      border-radius:10px;padding:12px 16px;margin-bottom:16px;font-size:12px;color:var(--yellow);
+      display:flex;align-items:center;gap:10px`;
+    avisoEl.innerHTML = `<span style="font-size:16px">⚠️</span>
+      <span>Comparação justa: <strong>${ano1}</strong> e <strong>${ano2}</strong>
+      comparados de <strong>Janeiro a ${periodos.labelCorte}</strong>
+      (${ano2} tem dados até ${periodos.labelCorte}).</span>`;
+    wrap.insertBefore(avisoEl, wrap.firstChild);
+  }
+
   const kpisComp = [];
   for (let i = 1; i < dadosPorAno.length; i++) {
     const prev = dadosPorAno[i - 1], curr = dadosPorAno[i];
     const fatPct = prev.fat > 0 ? +((curr.fat - prev.fat) / prev.fat * 100).toFixed(1) : 0;
     const despPct = prev.desp > 0 ? +((curr.desp - prev.desp) / prev.desp * 100).toFixed(1) : 0;
-    const lucroPct = prev.lucro !== 0 ? +((curr.lucro - prev.lucro) / Math.abs(prev.lucro) * 100).toFixed(1) : (curr.lucro > 0 ? 100 : -100);
+    const lucroPct = prev.lucro !== 0
+      ? +((curr.lucro - prev.lucro) / Math.abs(prev.lucro) * 100).toFixed(1)
+      : (curr.lucro > 0 ? 100 : -100);
     const difEfic = +(fatPct - despPct).toFixed(1);
     kpisComp.push(
       { l: `Receita ${prev.ano}→${curr.ano}`, v: (fatPct > 0 ? '+' : '') + fatPct + '%', s: `${fmtK(prev.fat)} → ${fmtK(curr.fat)}`, c: fatPct > 0 ? 'var(--green)' : 'var(--red)' },
       { l: `Despesas ${prev.ano}→${curr.ano}`, v: (despPct > 0 ? '+' : '') + despPct + '%', s: `${fmtK(prev.desp)} → ${fmtK(curr.desp)}`, c: despPct < fatPct ? 'var(--green)' : despPct < 20 ? 'var(--yellow)' : 'var(--red)' },
       { l: `Lucro ${prev.ano}→${curr.ano}`, v: (lucroPct > 0 ? '+' : '') + lucroPct + '%', s: `${fmtK(prev.lucro)} → ${fmtK(curr.lucro)}`, c: lucroPct > 0 ? 'var(--green)' : 'var(--red)' },
-      { l: `Eficiência ${prev.ano}→${curr.ano}`, v: (difEfic > 0 ? '+' : '') + difEfic + ' p.p.', s: 'receita cresceu ' + (difEfic > 0 ? 'mais' : 'menos') + ' que despesas', c: difEfic > 0 ? 'var(--green)' : difEfic > -5 ? 'var(--yellow)' : 'var(--red)' },
+      { l: `Eficiência ${prev.ano}→${curr.ano}`, v: (difEfic > 0 ? '+' : '') + difEfic + '%', s: 'receita cresceu ' + (difEfic > 0 ? 'mais' : 'menos') + ' que despesas', c: difEfic > 0 ? 'var(--green)' : difEfic > -5 ? 'var(--yellow)' : 'var(--red)' },
     );
   }
+
   document.getElementById('finYearCompareKpis').innerHTML = kpisComp.map(k =>
-    `<div class="kpi" style="--kc:${k.c}"><div class="kpi-lbl">${k.l}</div><div class="kpi-val">${k.v}</div><div class="kpi-sub">${k.s}</div></div>`
+    `<div class="kpi" style="--kc:${k.c}">
+      <div class="kpi-lbl">${k.l}</div>
+      <div class="kpi-val">${k.v}</div>
+      <div class="kpi-sub">${k.s}</div>
+    </div>`
   ).join('');
 
   if (_finYearGrowthChart) { _finYearGrowthChart.destroy(); _finYearGrowthChart = null; }
   const gc = document.getElementById('finYearGrowthChart');
   if (gc && dadosPorAno.length >= 2) {
-    const labelsAnos = dadosPorAno.slice(1).map(d => String(d.ano));
-    const fatGrowths = dadosPorAno.slice(1).map((d, i) => { const p = dadosPorAno[i]; return p.fat > 0 ? +((d.fat - p.fat) / p.fat * 100).toFixed(1) : 0; });
-    const despGrowths = dadosPorAno.slice(1).map((d, i) => { const p = dadosPorAno[i]; return p.desp > 0 ? +((d.desp - p.desp) / p.desp * 100).toFixed(1) : 0; });
-    const lucroGrowths = dadosPorAno.slice(1).map((d, i) => { const p = dadosPorAno[i]; return p.lucro !== 0 ? +((d.lucro - p.lucro) / Math.abs(p.lucro) * 100).toFixed(1) : 0; });
+    const prev = dadosPorAno[dadosPorAno.length - 2];
+    const curr = dadosPorAno[dadosPorAno.length - 1];
+    const fatPct = prev.fat > 0 ? +((curr.fat - prev.fat) / prev.fat * 100).toFixed(1) : 0;
+    const despPct = prev.desp > 0 ? +((curr.desp - prev.desp) / prev.desp * 100).toFixed(1) : 0;
+    const lucroPct = prev.lucro !== 0 ? +((curr.lucro - prev.lucro) / Math.abs(prev.lucro) * 100).toFixed(1) : 0;
+    const marPct = +(curr.mar - prev.mar).toFixed(1);
     _finYearGrowthChart = new Chart(gc, {
       type: 'bar',
       data: {
-        labels: labelsAnos, datasets: [
-          { label: 'Receita %', data: fatGrowths, backgroundColor: 'rgba(52,211,153,.7)', borderColor: '#34D399', borderWidth: 1.5, borderRadius: 5 },
-          { label: 'Despesas %', data: despGrowths, backgroundColor: 'rgba(248,113,113,.65)', borderColor: '#F87171', borderWidth: 1.5, borderRadius: 5 },
-          { label: 'Lucro %', data: lucroGrowths, backgroundColor: 'rgba(79,156,249,.6)', borderColor: '#4F9CF9', borderWidth: 1.5, borderRadius: 5 },
-        ]
+        labels: ['Receita', 'Despesas', 'Lucro', 'Margem (%)'],
+        datasets: [{
+          label: `${prev.ano}→${curr.ano}`,
+          data: [fatPct, despPct, lucroPct, marPct],
+          backgroundColor: [
+            fatPct >= 0 ? 'rgba(52,211,153,.7)' : 'rgba(248,113,113,.7)',
+            despPct <= fatPct ? 'rgba(52,211,153,.7)' : 'rgba(248,113,113,.7)',
+            lucroPct >= 0 ? 'rgba(79,156,249,.7)' : 'rgba(248,113,113,.7)',
+            marPct >= 0 ? 'rgba(167,139,250,.7)' : 'rgba(248,113,113,.7)',
+          ],
+          borderWidth: 1.5, borderRadius: 6,
+        }]
       },
       options: {
         responsive: true, maintainAspectRatio: false,
-        interaction: { mode: 'index', intersect: false },
-        plugins: { legend: { labels: { color: '#94A3B8', font: { size: 11 } } }, tooltip: { callbacks: { label: ctx => `${ctx.dataset.label}: ${ctx.raw > 0 ? '+' : ''}${ctx.raw}%` } } },
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: { label: ctx => ` ${ctx.raw > 0 ? '+' : ''}${ctx.raw}%` } }
+        },
         scales: {
-          x: { ticks: { color: '#64748B', font: { size: 11 } }, grid: { color: 'rgba(255,255,255,.04)' } },
-          y: { ticks: { color: '#64748B', font: { size: 10 }, callback: v => (v > 0 ? '+' : '') + v + '%' }, grid: { color: 'rgba(255,255,255,.06)' } }
+          x: { ticks: { color: '#94A3B8', font: { size: 10 } }, grid: { display: false } },
+          y: { ticks: { color: '#64748B', font: { size: 10 }, callback: v => v + '%' }, grid: { color: 'rgba(255,255,255,.06)' } }
         }
       }
     });
@@ -2777,71 +3517,148 @@ function renderFinYearCompare(anos, marColor) {
   const lc = document.getElementById('finYearLucroChart');
   if (lc) {
     _finYearLucroChart = new Chart(lc, {
-      type: 'line',
+      type: 'bar',
       data: {
-        labels: dadosPorAno.map(d => String(d.ano)), datasets: [
-          { label: 'Receita', data: dadosPorAno.map(d => d.fat), borderColor: '#34D399', backgroundColor: 'rgba(52,211,153,.07)', borderWidth: 2.5, pointRadius: 5, tension: .3, fill: true },
-          { label: 'Despesas', data: dadosPorAno.map(d => d.desp), borderColor: '#F87171', backgroundColor: 'rgba(248,113,113,.07)', borderWidth: 2.5, pointRadius: 5, tension: .3, fill: true },
-          { label: 'Lucro', data: dadosPorAno.map(d => d.lucro), borderColor: '#4F9CF9', backgroundColor: 'rgba(79,156,249,.08)', borderWidth: 2, pointRadius: 5, tension: .3, fill: true, borderDash: [6, 3] },
+        labels: dadosPorAno.map(d => String(d.ano)),
+        datasets: [
+          { label: 'Receita', data: dadosPorAno.map(d => d.fat), backgroundColor: 'rgba(52,211,153,.7)', borderColor: '#34D399', borderWidth: 1.5, borderRadius: 5 },
+          { label: 'Despesas', data: dadosPorAno.map(d => d.desp), backgroundColor: 'rgba(248,113,113,.65)', borderColor: '#F87171', borderWidth: 1.5, borderRadius: 5 },
+          { label: 'Lucro', data: dadosPorAno.map(d => d.lucro), backgroundColor: 'rgba(79,156,249,.65)', borderColor: '#4F9CF9', borderWidth: 1.5, borderRadius: 5 },
         ]
       },
       options: {
         responsive: true, maintainAspectRatio: false,
         interaction: { mode: 'index', intersect: false },
-        plugins: { legend: { labels: { color: '#94A3B8', font: { size: 11 } } }, tooltip: { callbacks: { label: ctx => ' ' + fmtK(ctx.raw) } } },
+        plugins: {
+          legend: { labels: { color: '#94A3B8', font: { size: 11 } } },
+          tooltip: { callbacks: { label: ctx => ` ${ctx.dataset.label}: ${fmtK(ctx.raw)}` } }
+        },
         scales: {
-          x: { ticks: { color: '#64748B', font: { size: 11 } }, grid: { color: 'rgba(255,255,255,.04)' } },
+          x: { ticks: { color: '#64748B', font: { size: 10 } }, grid: { display: false } },
           y: { ticks: { color: '#64748B', font: { size: 10 }, callback: v => fmtK(v) }, grid: { color: 'rgba(255,255,255,.06)' } }
         }
       }
     });
   }
 
-  const insYearComp = [];
-  for (let i = 1; i < dadosPorAno.length; i++) {
-    const prev = dadosPorAno[i - 1], curr = dadosPorAno[i];
-    const fatPct = prev.fat > 0 ? +((curr.fat - prev.fat) / prev.fat * 100).toFixed(1) : 0;
-    const despPct = prev.desp > 0 ? +((curr.desp - prev.desp) / prev.desp * 100).toFixed(1) : 0;
-    const lucroPct = prev.lucro !== 0 ? +((curr.lucro - prev.lucro) / Math.abs(prev.lucro) * 100).toFixed(1) : (curr.lucro > 0 ? 100 : -100);
-    const difEfic = +(fatPct - despPct).toFixed(1);
-    if (fatPct > 0 && despPct > fatPct + 10) insYearComp.push({ t: 'a', i: '📈', l: `${prev.ano}→${curr.ano}: Despesas Cresceram Mais`, txt: `Receita +${fatPct}% vs Despesas +${despPct}%.`, sub: 'Esse descompasso corrói a margem.' });
-    else if (difEfic > 10) insYearComp.push({ t: 'g', i: '📉', l: `${prev.ano}→${curr.ano}: Receita Crescendo Mais`, txt: `Receita +${fatPct}% vs Despesas +${despPct}% — ganho de ${difEfic} p.p.`, sub: 'A empresa está escalando com eficiência.' });
-    else if (Math.abs(difEfic) <= 5) insYearComp.push({ t: 'i', i: '⚖️', l: `${prev.ano}→${curr.ano}: Crescimento Proporcional`, txt: `Receita +${fatPct}% vs Despesas +${despPct}%.`, sub: 'Buscar crescer receita acima das despesas.' });
-    if (lucroPct < -20) insYearComp.push({ t: 'a', i: '💸', l: `${prev.ano}→${curr.ano}: Lucro Caiu ${Math.abs(lucroPct).toFixed(0)}%`, txt: `De ${fmtK(prev.lucro)} para ${fmtK(curr.lucro)}.`, sub: 'Ação urgente necessária.' });
-    else if (lucroPct > 20) insYearComp.push({ t: 'g', i: '💚', l: `${prev.ano}→${curr.ano}: Lucro Cresceu ${lucroPct.toFixed(0)}%`, txt: `De ${fmtK(prev.lucro)} para ${fmtK(curr.lucro)}.`, sub: 'Sinal muito positivo.' });
-    const marDif = +(curr.mar - prev.mar).toFixed(1);
-    if (Math.abs(marDif) >= 3) insYearComp.push({ t: marDif > 0 ? 'g' : 'w', i: '📊', l: `Margem ${marDif > 0 ? 'Subiu' : 'Caiu'} ${Math.abs(marDif)} p.p. em ${curr.ano}`, txt: `De ${prev.mar}% para ${curr.mar}%.`, sub: marDif > 0 ? 'Eficiência melhorando.' : 'Revisar estrutura de custos.' });
+  const insWrap = document.getElementById('finYearCompareIns');
+  if (insWrap && dadosPorAno.length >= 2) {
+    const c = dadosPorAno[dadosPorAno.length - 1];
+    // usa apenas meses que têm receita real na fonte selecionada
+    const mesesParaInsights = getMesesFinanceirosPorAno(c.ano)
+      .map(k => getFinMesDataComReceita(k))
+      .filter(m => m && !m._semDados);
+    const ins = generateFinancialInsights(mesesParaInsights);
+    ins.sort((a, b) =>
+      ({ 'a': 0, 'o': 1, 'w': 2, 'i': 3, 'g': 4 }[a.t] || 9) -
+      ({ 'a': 0, 'o': 1, 'w': 2, 'i': 3, 'g': 4 }[b.t] || 9)
+    );
+    insWrap.innerHTML = ins.length > 0
+      ? `<div class="ins-grid">${ins.map(i =>
+        `<div class="ins">
+            <div class="ins-ico ico-${i.t}">${i.i}</div>
+            <div>
+              <div class="ins-type tp-${i.t}">${i.l}</div>
+              <div class="ins-txt">${i.txt}</div>
+              <div class="ins-sub">${i.sub}</div>
+            </div>
+          </div>`).join('')}</div>`
+      : '';
   }
-  document.getElementById('finYearCompareIns').innerHTML = insYearComp.length > 0
-    ? insYearComp.map(i => `<div class="ins"><div class="ins-ico ico-${i.t}">${i.i}</div><div><div class="ins-type tp-${i.t}">${i.l}</div><div class="ins-txt">${i.txt}</div><div class="ins-sub">${i.sub}</div></div></div>`).join('')
-    : '<div style="color:var(--muted);font-size:13px">Carregue dados de dois anos para ver a comparação.</div>';
 }
 
-function generateFinancialInsights(meses) {
+function generateFinancialInsights(mesesView) {
   const ins = [];
-  if (!meses || !meses.length) return ins;
-  const last = meses[meses.length - 1], first_ = meses[0], g = last.geral;
-  const mar = g.margem !== null && g.margem !== undefined ? g.margem : 0;
-  const ratio = g.aprovado > 0 ? (g.despesas / g.aprovado * 100) : 0;
-  const marIdeal = _benchmarks.margemIdeal || 20;
-  const marBaixa = _benchmarks.margemBaixa || 10;
-  if (mar >= 30) ins.push({ t: 'g', i: '💚', l: 'Margem Excelente', txt: `Margem de ${mar}% acima da meta de ${marIdeal}%.`, sub: 'Reinvestir em marketing e treinamento.' });
-  else if (mar >= marIdeal) ins.push({ t: 'g', i: '✅', l: 'Margem Saudável', txt: `Margem de ${mar}% dentro do esperado.`, sub: 'Manter controle e aumentar faturamento.' });
-  else if (mar >= marBaixa) ins.push({ t: 'w', i: '⚠️', l: 'Margem Baixa', txt: `Margem de ${mar}% abaixo do ideal (${marIdeal}%).`, sub: 'Revisar despesas fixas e variáveis.' });
-  else if (mar >= 0) ins.push({ t: 'a', i: '🚨', l: 'Margem Crítica', txt: `Margem de ${mar}% — quase no prejuízo.`, sub: 'Urgente: cortar custos e aumentar fechamentos.' });
-  else ins.push({ t: 'a', i: '🔴', l: 'Empresa no Prejuízo', txt: `Despesas superam faturamento — prejuízo de ${fmtK(Math.abs(g.aprovado - g.despesas))}.`, sub: 'Corte imediato de despesas necessário.' });
-  if (ratio > 80) ins.push({ t: 'a', i: '📊', l: `Despesas em ${ratio.toFixed(0)}% do Faturamento`, txt: `R$${ratio.toFixed(0)} de cada R$100 consumidos.`, sub: 'Renegociar contratos de custo fixo.' });
-  else if (ratio > 65) ins.push({ t: 'w', i: '📊', l: `Despesas em ${ratio.toFixed(0)}% do Faturamento`, txt: 'Controlável, mas com espaço para melhora.', sub: 'Negociar fornecedores e reduzir variáveis.' });
-  if (meses.length >= 2) {
-    const fatG = first_.geral.aprovado > 0 ? +((last.geral.aprovado - first_.geral.aprovado) / first_.geral.aprovado * 100).toFixed(1) : 0;
-    const despG = first_.geral.despesas > 0 ? +((last.geral.despesas - first_.geral.despesas) / first_.geral.despesas * 100).toFixed(1) : 0;
-    if (despG > fatG + 15) ins.push({ t: 'a', i: '📈', l: 'Despesas Crescendo Mais que Faturamento', txt: `Fat. +${fatG}% vs Desp. +${despG}%.`, sub: 'Identificar quais despesas cresceram.' });
-    else if (fatG > despG + 5) ins.push({ t: 'g', i: '📉', l: 'Faturamento Crescendo Mais que Despesas', txt: `Fat. +${fatG}% vs Desp. +${despG}% — eficiência.`, sub: 'Manter esse padrão.' });
-    const margens = meses.map(m => m.geral.margem !== null ? m.geral.margem : 0);
-    const tend = +(margens[margens.length - 1] - margens[0]).toFixed(1);
-    if (tend <= -8) ins.push({ t: 'a', i: '📉', l: 'Margem em Queda', txt: `Caiu ${Math.abs(tend)} p.p. no período.`, sub: 'Ação imediata necessária.' });
-    else if (tend >= 8) ins.push({ t: 'g', i: '📈', l: 'Margem em Crescimento', txt: `Subiu ${tend} p.p. — de ${margens[0]}% para ${margens[margens.length - 1]}%.`, sub: 'Manter a disciplina de custos.' });
+  if (!mesesView || mesesView.length === 0) return ins;
+  const fatTotal = mesesView.reduce((s, m) => s + m.geral.aprovado, 0);
+  const despTotal = mesesView.reduce((s, m) => s + m.geral.despesas, 0);
+  const lucroTotal = fatTotal - despTotal;
+  const margemTotal = fatTotal > 0 ? +((lucroTotal / fatTotal) * 100).toFixed(1) : 0;
+  const ratioDespFat = fatTotal > 0 ? +((despTotal / fatTotal) * 100).toFixed(1) : 0;
+  const margemIdeal = _benchmarks.margemIdeal || 20;
+  const margemBaixa = _benchmarks.margemBaixa || 10;
+
+  // só analisa meses que realmente têm receita carregada
+  const mesesComReceita = mesesView.filter(m => m.geral.aprovado > 0 && !m._semDados);
+
+  // análise geral de lucro/margem
+  if (fatTotal === 0 && despTotal > 0) {
+    ins.push({ t: 'a', i: '⚠️', l: 'Sem Receita para Análise', txt: `Despesas de ${fmtK(despTotal)} sem receita carregada.`, sub: 'Verifique a fonte de receita selecionada ou faça upload da planilha correspondente.' });
+    return ins;
   }
+
+  if (lucroTotal >= 0) {
+    if (margemTotal >= margemIdeal) {
+      ins.push({ t: 'g', i: '✅', l: 'Margem Saudável', txt: `Lucro de ${fmtK(lucroTotal)} com margem de ${margemTotal}%.`, sub: `Despesas representam ${ratioDespFat}% da receita. Continue assim.` });
+    } else if (margemTotal >= margemBaixa) {
+      ins.push({ t: 'w', i: '📊', l: 'Margem Baixa mas Positiva', txt: `Lucro de ${fmtK(lucroTotal)} — margem de ${margemTotal}%.`, sub: `Meta recomendada: acima de ${margemIdeal}%. Reduzir despesas variáveis.` });
+    } else {
+      ins.push({ t: 'o', i: '⚠️', l: 'Margem Muito Baixa', txt: `Lucro de apenas ${fmtK(lucroTotal)} — margem de ${margemTotal}%.`, sub: `Despesas em ${ratioDespFat}% da receita. Revisar custos com urgência.` });
+    }
+  } else {
+    ins.push({ t: 'a', i: '🔴', l: 'Empresa no Prejuízo', txt: `Prejuízo de ${fmtK(Math.abs(lucroTotal))} — despesas superam receita.`, sub: `Despesas em ${ratioDespFat}% da receita. Corte imediato necessário.` });
+  }
+
+  if (ratioDespFat > 90 && lucroTotal >= 0) {
+    ins.push({ t: 'w', i: '📈', l: `Despesas em ${ratioDespFat}% da Receita`, txt: `R$${ratioDespFat} de cada R$100 consumidos em despesas.`, sub: 'Meta recomendada: abaixo de 80%. Renegociar contratos de custo fixo.' });
+  }
+
+  // análise de tendência — só quando há pelo menos 2 meses com receita real
+  if (mesesComReceita.length >= 2) {
+    const primeiro = mesesComReceita[0];
+    const ultimo = mesesComReceita[mesesComReceita.length - 1];
+    const fatPrimeiro = primeiro.geral.aprovado;
+    const fatUltimo = ultimo.geral.aprovado;
+    const despPrimeiro = primeiro.geral.despesas;
+    const despUltimo = ultimo.geral.despesas;
+    const varFat = fatPrimeiro > 0 ? +((fatUltimo - fatPrimeiro) / fatPrimeiro * 100).toFixed(1) : null;
+    const varDesp = despPrimeiro > 0 ? +((despUltimo - despPrimeiro) / despPrimeiro * 100).toFixed(1) : null;
+    if (varFat !== null && varDesp !== null && Math.abs(varFat) > 3) {
+      const crescendoMaisQueDesp = varFat > varDesp;
+      ins.push({
+        t: crescendoMaisQueDesp ? 'g' : 'w',
+        i: crescendoMaisQueDesp ? '📈' : '📉',
+        l: crescendoMaisQueDesp ? 'Receita Crescendo Mais que Despesas' : 'Despesas Crescendo Mais que Receita',
+        txt: `Receita ${varFat >= 0 ? '+' : ''}${varFat}% vs Despesas ${varDesp >= 0 ? '+' : ''}${varDesp}% (${primeiro.periodo} → ${ultimo.periodo}).`,
+        sub: crescendoMaisQueDesp ? 'Eficiência financeira melhorando.' : 'Identificar quais despesas cresceram e conter o avanço.'
+      });
+    }
+    const margPrimeiro = fatPrimeiro > 0 ? +((fatPrimeiro - despPrimeiro) / fatPrimeiro * 100).toFixed(1) : 0;
+    const margUltimo = fatUltimo > 0 ? +((fatUltimo - despUltimo) / fatUltimo * 100).toFixed(1) : 0;
+    const varMarg = +(margUltimo - margPrimeiro).toFixed(1);
+    if (Math.abs(varMarg) >= 2) {
+      ins.push({
+        t: varMarg > 0 ? 'g' : 'w',
+        i: varMarg > 0 ? '✅' : '📉',
+        l: varMarg > 0 ? 'Margem em Alta' : 'Margem em Queda',
+        txt: `Saiu de ${margPrimeiro}% para ${margUltimo}% (variação de ${varMarg > 0 ? '+' : ''}${varMarg}%).`,
+        sub: varMarg > 0 ? 'Tendência positiva — manter controle de custos.' : 'Analisar quais meses puxaram a margem para baixo.'
+      });
+    }
+  }
+
+  // variação entre meses — só quando há pelo menos 3 meses com receita
+  if (mesesComReceita.length >= 3) {
+    const comMargem = mesesComReceita.filter(m => m.geral.aprovado > 0);
+    if (comMargem.length >= 2) {
+      const melhor = comMargem.reduce((a, b) => {
+        const ma = (a.geral.aprovado - a.geral.despesas) / a.geral.aprovado;
+        const mb = (b.geral.aprovado - b.geral.despesas) / b.geral.aprovado;
+        return ma > mb ? a : b;
+      });
+      const pior = comMargem.reduce((a, b) => {
+        const ma = (a.geral.aprovado - a.geral.despesas) / a.geral.aprovado;
+        const mb = (b.geral.aprovado - b.geral.despesas) / b.geral.aprovado;
+        return ma < mb ? a : b;
+      });
+      const margMelhor = +((melhor.geral.aprovado - melhor.geral.despesas) / melhor.geral.aprovado * 100).toFixed(1);
+      const margPior = +((pior.geral.aprovado - pior.geral.despesas) / pior.geral.aprovado * 100).toFixed(1);
+      if (melhor.periodo !== pior.periodo) {
+        ins.push({ t: 'i', i: '📊', l: 'Variação entre Meses', txt: `Melhor: ${melhor.periodo} (${margMelhor}%) · Pior: ${pior.periodo} (${margPior}%).`, sub: 'Analisar o que diferenciou os meses extremos.' });
+      }
+    }
+  }
+
   return ins;
 }
 
@@ -2879,53 +3696,21 @@ function getAcoesList(M, prev_) {
   const ni = M.canais.find(c => c.canal === 'NAO INFORMADO');
   const acoes = [];
   if (top5.length > 0)
-    acoes.push({
-      t: `Ligar para os ${top5.length} maiores ${pLabelP.toLowerCase()} vencidos`,
-      d: `Prioridade: ${top5.slice(0, 3).map(v => v.paciente.split(' ')[0]).join(', ')}. Total em jogo: ${fmtK(top5.reduce((s, v) => s + v.total, 0))}. Oferecer condição especial.`,
-      p: 'ph'
-    });
+    acoes.push({ t: `Ligar para os ${top5.length} maiores ${pLabelP.toLowerCase()} vencidos`, d: `Prioridade: ${top5.slice(0, 3).map(v => v.paciente.split(' ')[0]).join(', ')}. Total em jogo: ${fmtK(top5.reduce((s, v) => s + v.total, 0))}. Oferecer condição especial.`, p: 'ph' });
   if (piorTaxa)
-    acoes.push({
-      t: `Reunião com ${piorTaxa.nome} — análise de ${pLabelP.toLowerCase()} perdidos`,
-      d: `${piorTaxa.vencidos} vencidos (${fmtK(piorTaxa.valor_perdido)}). Mapear objeções e criar roteiro de resposta.`,
-      p: 'ph'
-    });
+    acoes.push({ t: `Reunião com ${piorTaxa.nome} — análise de ${pLabelP.toLowerCase()} perdidos`, d: `${piorTaxa.vencidos} vencidos (${fmtK(piorTaxa.valor_perdido)}). Mapear objeções e criar roteiro de resposta.`, p: 'ph' });
   if (g.cancelados > g.total * (_benchmarks.cancelamentosAlerta / 100 || 0.08))
-    acoes.push({
-      t: 'Investigar motivos dos cancelamentos',
-      d: `${g.cancelados} cancelamentos. Verificar padrão por ${vLabel.toLowerCase()}, canal ou período.`,
-      p: 'ph'
-    });
+    acoes.push({ t: 'Investigar motivos dos cancelamentos', d: `${g.cancelados} cancelamentos. Verificar padrão por ${vLabel.toLowerCase()}, canal ou período.`, p: 'ph' });
   if (ni && ni.total > 5)
-    acoes.push({
-      t: `Tornar obrigatório o campo Canal de Marketing`,
-      d: `${ni.total} ${pLabelP.toLowerCase()} sem canal. Campo obrigatório para garantir análise de ROI.`,
-      p: 'pm'
-    });
+    acoes.push({ t: `Tornar obrigatório o campo Canal de Marketing`, d: `${ni.total} ${pLabelP.toLowerCase()} sem canal. Campo obrigatório para garantir análise de ROI.`, p: 'pm' });
   if (upsell)
-    acoes.push({
-      t: `Capacitar ${upsell.nome} em upsell`,
-      d: `${upsell.taxa}% de conversão mas ticket médio de ${fmtK(upsell.ticket_medio)}. ${cLabelP} engajados são receptivos a serviços complementares.`,
-      p: 'pm'
-    });
+    acoes.push({ t: `Capacitar ${upsell.nome} em upsell`, d: `${upsell.taxa}% de conversão mas ticket médio de ${fmtK(upsell.ticket_medio)}. ${cLabelP} engajados são receptivos a serviços complementares.`, p: 'pm' });
   if (melhorCanal)
-    acoes.push({
-      t: `Ampliar foco no canal "${canalDisplay(melhorCanal.canal)}"`,
-      d: `${melhorCanal.taxa}% de conversão e ${fmtK(melhorCanal.valor)} — melhor ROI.`,
-      p: 'pm'
-    });
+    acoes.push({ t: `Ampliar foco no canal "${canalDisplay(melhorCanal.canal)}"`, d: `${melhorCanal.taxa}% de conversão e ${fmtK(melhorCanal.valor)} — melhor ROI.`, p: 'pm' });
   if (melhorFat && pct(melhorFat.valor_aprovado, g.aprovado) > 35)
-    acoes.push({
-      t: `Reduzir dependência de ${melhorFat.nome}`,
-      d: `${pct(melhorFat.valor_aprovado, g.aprovado).toFixed(0)}% da receita em um ${vLabel.toLowerCase()} — risco operacional. Desenvolver os demais ${vLabelP.toLowerCase()}.`,
-      p: 'pl'
-    });
+    acoes.push({ t: `Reduzir dependência de ${melhorFat.nome}`, d: `${pct(melhorFat.valor_aprovado, g.aprovado).toFixed(0)}% da receita em um ${vLabel.toLowerCase()} — risco operacional. Desenvolver os demais ${vLabelP.toLowerCase()}.`, p: 'pl' });
   if (prev_ && M.geral.aprovado < prev_.geral.aprovado)
-    acoes.push({
-      t: `Recuperar queda de ${fmtK(prev_.geral.aprovado - M.geral.aprovado)} vs ${prev_.periodo}`,
-      d: `Receita caiu ${pct(prev_.geral.aprovado - M.geral.aprovado, prev_.geral.aprovado).toFixed(0)}% em relação ao período anterior.`,
-      p: 'ph'
-    });
+    acoes.push({ t: `Recuperar queda de ${fmtK(prev_.geral.aprovado - M.geral.aprovado)} vs ${prev_.periodo}`, d: `Receita caiu ${pct(prev_.geral.aprovado - M.geral.aprovado, prev_.geral.aprovado).toFixed(0)}% em relação ao período anterior.`, p: 'ph' });
   return acoes;
 }
 
@@ -2946,7 +3731,8 @@ function showTab(id, btn) {
 //  RESET
 // ═══════════════════════════════════════
 function resetDash() {
-  MONTHS = []; YEARS = {}; parsedMonths = {}; parsedExpenses = {}; _detectionLogs = [];
+  MONTHS = []; YEARS = {}; parsedMonths = {}; parsedExpenses = {}; parsedFaturamento = {}; _detectionLogs = [];
+  _finModoReceita = 'aprovados';
   activeMonth = 0; activeYear = null; cmpItems = []; _finView = null;
   dentSort = 'taxa'; activeDentFilter = 'all'; clinicGoal = 0;
   _rangeFilter = null; _rangeFilteredData = null;
@@ -2996,6 +3782,21 @@ function resetDash() {
 function downloadTemplate(tipo) {
   if (tipo === 'orcamentos') downloadTemplateOrcamentos();
   else if (tipo === 'despesas') downloadTemplateDespesas();
+  else if (tipo === 'faturamento') downloadTemplateFaturamento();
+}
+
+function downloadTemplateFaturamento() {
+  const wb = XLSX.utils.book_new();
+  const rows = [
+    ['Faturamento', 'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+      'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'],
+    ['Receita Real', 45000, 52000, 48000, 51000, 55000, 49000,
+      53000, 58000, 47000, 61000, 56000, 63000],
+  ];
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = [{ wch: 18 }, ...Array(12).fill({ wch: 14 })];
+  XLSX.utils.book_append_sheet(wb, ws, 'Faturamento 2026');
+  XLSX.writeFile(wb, 'Template_Faturamento_Real.xlsx');
 }
 function downloadTemplateOrcamentos() {
   const wb = XLSX.utils.book_new();
@@ -3131,10 +3932,7 @@ function iniciarTimerApresentacao() {
 }
 
 // ═══════════════════════════════════════
-//  EXPORT PDF — COM MELHORIAS
-// ═══════════════════════════════════════
-// ═══════════════════════════════════════
-//  EXPORT PDF — COMPLETO REESTRUTURADO
+//  EXPORT PDF
 // ═══════════════════════════════════════
 function exportPDF() {
   const overlay = document.getElementById('exportOverlay');
@@ -3154,39 +3952,31 @@ function exportPDF() {
       const pLabel = CFG.proposta || 'Orcamento';
       const pLabelP = pluralizar(pLabel);
       const W = 210, mg = 14;
-      const temDespesas = M.geral.hasDespesas;
 
-      // Paleta
-      const cDark = [10, 13, 20];
-      const cSurf = [22, 28, 45];
-      const cSurf2 = [30, 37, 58];
+      const cDark   = [10, 13, 20];
+      const cSurf   = [22, 28, 45];
+      const cSurf2  = [30, 37, 58];
       const cAccent = [79, 156, 249];
-      const cGreen = [52, 211, 153];
-      const cRed = [248, 113, 113];
+      const cGreen  = [52, 211, 153];
+      const cRed    = [248, 113, 113];
       const cYellow = [251, 191, 36];
       const cOrange = [251, 146, 60];
-      const cText = [226, 232, 240];
-      const cMuted = [100, 116, 139];
-      const cWhite = [255, 255, 255];
+      const cText   = [226, 232, 240];
+      const cMuted  = [100, 116, 139];
 
-      // Limpa string — sem emoji, sem caracter especial
       const clean = s => {
         if (!s) return '';
         return String(s)
-          .normalize('NFD')
-          .replace(/[\u0300-\u036f]/g, '')
+          .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
           .replace(/[^\x20-\x7E]/g, '')
-          .replace(/\s+/g, ' ')
-          .trim();
+          .replace(/\s+/g, ' ').trim();
       };
 
-      // Fundo de pagina
       const pageBg = () => {
         doc.setFillColor(...cDark);
         doc.rect(0, 0, 210, 297, 'F');
       };
 
-      // Cabecalho de secao
       const secTitle = (txt, y) => {
         doc.setFont('helvetica', 'bold');
         doc.setFontSize(7.5);
@@ -3198,7 +3988,6 @@ function exportPDF() {
         return y + 5;
       };
 
-      // Rodape
       const addFooter = (pagNum, pagTotal) => {
         doc.setFillColor(...cSurf2);
         doc.rect(0, 285, 210, 12, 'F');
@@ -3210,7 +3999,6 @@ function exportPDF() {
         doc.text('Gerado em ' + new Date().toLocaleDateString('pt-BR'), W / 2, 291, { align: 'center' });
       };
 
-      // Barra de progresso horizontal
       const progressBar = (x, y, w, h, pct, cor) => {
         doc.setFillColor(...cSurf2);
         doc.roundedRect(x, y, w, h, h / 2, h / 2, 'F');
@@ -3221,34 +4009,31 @@ function exportPDF() {
         }
       };
 
+      // ── calcula total de páginas ──
+      const hasFin = g.hasDespesas || Object.keys(parsedExpenses).length > 0 || Object.keys(parsedFaturamento).length > 0;
+      const totalPags = hasFin ? 6 : 5;
       let pagNum = 1;
 
-      // ══════════════════════════════════
-      //  PAGINA 1 — CAPA + KPIs + META + CONCENTRACAO
-      // ══════════════════════════════════
+      // ══════════════════════════════════════
+      // PÁGINA 1 — CAPA + KPIs
+      // ══════════════════════════════════════
       pageBg();
-
-      // Bloco capa
       doc.setFillColor(...cSurf);
       doc.roundedRect(mg, 8, W - mg * 2, 38, 3, 3, 'F');
       doc.setFillColor(...cAccent);
       doc.rect(mg, 8, 5, 38, 'F');
-
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(18);
       doc.setTextColor(...cAccent);
       doc.text(clean(nomeEmpresa), mg + 9, 22);
-
       doc.setFontSize(10);
       doc.setTextColor(...cText);
       doc.text('Dashboard Comercial | ' + clean(M.periodo), mg + 9, 30);
-
       doc.setFontSize(8);
       doc.setTextColor(...cMuted);
       doc.text('Gerado em ' + new Date().toLocaleDateString('pt-BR'), mg + 9, 37);
       doc.text('Relatorio de Performance', mg + 9, 42);
 
-      // Score box
       const sc = M.score >= 80 ? cGreen : M.score >= 65 ? cYellow : cRed;
       doc.setFillColor(...cSurf2);
       doc.roundedRect(W - mg - 32, 10, 32, 34, 3, 3, 'F');
@@ -3268,19 +4053,20 @@ function exportPDF() {
       doc.text(scoreLabel, W - mg - 16, 40, { align: 'center' });
 
       let y = 54;
-
-      // ── KPIs PRINCIPAIS ──
       y = secTitle('Indicadores Principais', y);
       const ticketMedio = g.aprovados > 0 ? g.aprovado / g.aprovados : 0;
       const goalAtivo = getGoalForActivePeriod();
       const goalPct = goalAtivo > 0 ? Math.min(+(g.aprovado / goalAtivo * 100).toFixed(1), 999) : null;
       const kpis = [
-        { l: 'Taxa de Conversao', v: g.taxa + '%', s: g.aprovados + '/' + g.total + ' orcamentos', c: cAccent },
-        { l: 'Receita Faturada', v: fmtK(g.aprovado), s: 'de ' + fmtK(g.orcado) + ' orcados', c: cGreen },
-        { l: 'Receita Perdida', v: fmtK(g.perdido), s: g.vencidos + ' vencidos', c: cRed },
-        { l: 'Ticket Medio', v: fmtK(ticketMedio), s: 'por aprovacao', c: cYellow },
-        { l: goalPct !== null ? 'Meta Atingida' : 'Recuperavel', v: goalPct !== null ? goalPct + '%' : fmtK(g.perdido * .3), s: goalPct !== null ? fmtK(g.aprovado) + ' de ' + fmtK(goalAtivo) : 'estimativa 30% follow-up', c: goalPct !== null ? (goalPct >= 100 ? cGreen : goalPct >= 75 ? cYellow : cRed) : cOrange },
-        { l: 'Cancelamentos', v: String(g.cancelados), s: fmtK(g.canceladoVal) + ' em valor', c: cOrange },
+        { l: 'Taxa de Conversao',    v: g.taxa + '%',         s: g.aprovados + '/' + g.total + ' orcamentos',        c: cAccent  },
+        { l: 'Receita Faturada',     v: fmtK(g.aprovado),     s: 'de ' + fmtK(g.orcado) + ' orcados',               c: cGreen   },
+        { l: 'Receita Perdida',      v: fmtK(g.perdido),      s: g.vencidos + ' vencidos',                           c: cRed     },
+        { l: 'Ticket Medio',         v: fmtK(ticketMedio),    s: 'por aprovacao',                                    c: cYellow  },
+        { l: goalPct !== null ? 'Meta Atingida' : 'Recuperavel',
+          v: goalPct !== null ? goalPct + '%' : fmtK(g.perdido * .3),
+          s: goalPct !== null ? fmtK(g.aprovado) + ' de ' + fmtK(goalAtivo) : 'estimativa 30% follow-up',
+          c: goalPct !== null ? (goalPct >= 100 ? cGreen : goalPct >= 75 ? cYellow : cRed) : cOrange },
+        { l: 'Cancelamentos',        v: String(g.cancelados), s: fmtK(g.canceladoVal) + ' em valor',                 c: cOrange  },
       ];
       const kw = (W - mg * 2 - 8) / 3;
       kpis.forEach(({ l, v, s, c }, i) => {
@@ -3305,7 +4091,6 @@ function exportPDF() {
       });
       y += 50;
 
-      // ── META ──
       if (goalAtivo > 0 && goalPct !== null) {
         y = secTitle('Resumo de Metas', y);
         doc.setFillColor(...cSurf);
@@ -3326,631 +4111,428 @@ function exportPDF() {
         y += 28;
       }
 
-      // ── CONCENTRACAO ──
+      // Índice de concentração
       if (M.dentistas.length > 1) {
         y = secTitle('Indice de Concentracao de Receita', y);
-        const sorted = [...M.dentistas].sort((a, b) => b.valor_aprovado - a.valor_aprovado);
-        const top1Pct = g.aprovado > 0 ? +(sorted[0].valor_aprovado / g.aprovado * 100).toFixed(1) : 0;
-        const concColor = top1Pct > 50 ? cRed : top1Pct > 35 ? cYellow : cGreen;
+        const topD = [...M.dentistas].sort((a, b) => b.valor_aprovado - a.valor_aprovado)[0];
+        const concPct = g.aprovado > 0 ? +(topD.valor_aprovado / g.aprovado * 100).toFixed(1) : 0;
         doc.setFillColor(...cSurf);
-        doc.roundedRect(mg, y, W - mg * 2, 22, 2, 2, 'F');
-        doc.setFillColor(...concColor);
-        doc.rect(mg, y, W - mg * 2, 1.5, 'F');
+        doc.roundedRect(mg, y, W - mg * 2, 14, 2, 2, 'F');
+        const concC = concPct > 40 ? cRed : concPct > 30 ? cYellow : cGreen;
         doc.setFont('helvetica', 'bold');
         doc.setFontSize(8);
-        doc.setTextColor(...concColor);
-        doc.text(clean(sorted[0].nome) + ' representa ' + top1Pct + '% da receita total', mg + 4, y + 7);
-        progressBar(mg + 4, y + 10, W - mg * 2 - 8, 4, top1Pct, concColor);
-        const risco = top1Pct > 50 ? 'RISCO ALTO - dependencia critica de um unico ' + clean(vLabel).toLowerCase() : top1Pct > 35 ? 'Atencao - considere diversificar a carteira de ' + clean(vLabelP).toLowerCase() : 'Saudavel - receita bem distribuida entre os ' + clean(vLabelP).toLowerCase();
+        doc.setTextColor(...concC);
+        doc.text(clean(topD.nome) + ' representa ' + concPct + '% da receita total', mg + 4, y + 6);
         doc.setFont('helvetica', 'normal');
         doc.setFontSize(7);
         doc.setTextColor(...cMuted);
-        doc.text(risco, mg + 4, y + 18);
-        // Top 3 vendedores mini
-        sorted.slice(0, 3).forEach((d, i) => {
-          const px = mg + 4 + (i * (W - mg * 2 - 8) / 3);
-          const pw = (W - mg * 2 - 8) / 3 - 4;
-          // mini barra
-        });
-        y += 26;
+        doc.text(concPct > 35 ? 'Atencao - considere diversificar a carteira de ' + clean(vLabelP.toLowerCase()) : 'Concentracao saudavel', mg + 4, y + 11);
+        y += 18;
       }
 
-      addFooter(pagNum++, '5');
-      doc.addPage();
+      addFooter(pagNum, totalPags);
 
-      // ══════════════════════════════════
-      //  PAGINA 2 — COMPARATIVO + VENDEDORES
-      // ══════════════════════════════════
-      pageBg();
+      // ══════════════════════════════════════
+      // PÁGINA 2 — VENDEDORES
+      // ══════════════════════════════════════
+      doc.addPage(); pagNum++; pageBg();
       y = 14;
 
-      // ── COMPARATIVO MES ANTERIOR ──
+      // comparativo anterior
+      y = secTitle('Comparativo com Periodo Anterior', y);
       if (prev_) {
-        y = secTitle('Comparativo — ' + clean(M.periodo) + ' vs ' + clean(prev_.periodo), y);
-        const tickPrev = prev_.geral.aprovados > 0 ? prev_.geral.aprovado / prev_.geral.aprovados : 0;
-        const compItens = [
-          { l: 'Receita', curr: fmtK(g.aprovado), prev: fmtK(prev_.geral.aprovado), diff: g.aprovado - prev_.geral.aprovado, base: prev_.geral.aprovado },
-          { l: 'Conversao', curr: g.taxa + '%', prev: prev_.geral.taxa + '%', diff: g.taxa - prev_.geral.taxa, base: prev_.geral.taxa },
-          { l: 'Ticket Medio', curr: fmtK(ticketMedio), prev: fmtK(tickPrev), diff: ticketMedio - tickPrev, base: tickPrev },
-          { l: 'Perdido', curr: fmtK(g.perdido), prev: fmtK(prev_.geral.perdido), diff: g.perdido - prev_.geral.perdido, base: prev_.geral.perdido, inv: true },
-          { l: 'Score', curr: M.score + '/100', prev: prev_.score + '/100', diff: M.score - prev_.score, base: prev_.score },
-          { l: 'Cancelamentos', curr: String(g.cancelados), prev: String(prev_.geral.cancelados), diff: g.cancelados - prev_.geral.cancelados, base: prev_.geral.cancelados, inv: true },
-        ];
-        const cw2 = (W - mg * 2 - 10) / 3;
-        compItens.forEach((ci, i) => {
-          const col = i % 3, row = Math.floor(i / 3);
-          const x = mg + col * (cw2 + 5), ky = y + row * 22;
-          const pctD = ci.base !== 0 ? (Math.abs(ci.diff) / Math.abs(ci.base) * 100) : 0;
-          const up = ci.inv ? ci.diff < 0 : ci.diff > 0;
-          const cor = Math.abs(pctD) < 0.5 ? cMuted : up ? cGreen : cRed;
-          doc.setFillColor(...cSurf);
-          doc.roundedRect(x, ky, cw2, 20, 2, 2, 'F');
-          doc.setFillColor(...cor);
-          doc.rect(x, ky, cw2, 1.5, 'F');
-          doc.setFont('helvetica', 'bold');
-          doc.setFontSize(6.5);
-          doc.setTextColor(...cMuted);
-          doc.text(clean(ci.l).toUpperCase(), x + 3, ky + 6);
-          doc.setFont('helvetica', 'bold');
-          doc.setFontSize(10);
-          doc.setTextColor(...cText);
-          doc.text(clean(ci.curr), x + 3, ky + 12);
-          doc.setFont('helvetica', 'normal');
-          doc.setFontSize(6.5);
-          doc.setTextColor(...cMuted);
-          doc.text('antes: ' + clean(ci.prev), x + 3, ky + 16.5);
-          const arrow = Math.abs(pctD) < 0.5 ? '= igual' : (up ? '+ ' : '- ') + pctD.toFixed(1) + '%';
-          doc.setFont('helvetica', 'bold');
-          doc.setFontSize(7);
-          doc.setTextColor(...cor);
-          doc.text(arrow, x + cw2 - 3, ky + 12, { align: 'right' });
-        });
-        y += 50;
+        const diffRec = g.aprovado - prev_.geral.aprovado;
+        const diffTaxa = +(g.taxa - prev_.geral.taxa).toFixed(1);
+        doc.setFillColor(...cSurf);
+        doc.roundedRect(mg, y, W - mg * 2, 14, 2, 2, 'F');
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(8);
+        doc.setTextColor(...cText);
+        const recTxt = 'Receita: ' + clean(fmtK(prev_.geral.aprovado)) + ' -> ' + clean(fmtK(g.aprovado)) + '  (' + (diffRec >= 0 ? '+' : '') + clean(fmtK(diffRec)) + ')';
+        const taxaTxt = '   |   Conversao: ' + prev_.geral.taxa + '% -> ' + g.taxa + '%  (' + (diffTaxa >= 0 ? '+' : '') + diffTaxa + '%)';
+        doc.text(recTxt + taxaTxt, mg + 4, y + 8);
+        y += 18;
       } else {
         doc.setFont('helvetica', 'normal');
         doc.setFontSize(8);
         doc.setTextColor(...cMuted);
-        doc.text('Comparativo nao disponivel - carregue mais de um periodo.', mg, y + 6);
+        doc.text('Comparativo nao disponivel - carregue mais de um periodo.', mg, y + 4);
         y += 12;
       }
 
-      // ── PERFORMANCE VENDEDORES ──
       y = secTitle('Performance por ' + clean(vLabel), y);
-      const dentSorted = [...M.dentistas].sort((a, b) => b.valor_aprovado - a.valor_aprovado);
-      doc.autoTable({
-        startY: y,
-        head: [[
-          '#', clean(vLabel), 'Orcamentos', 'Conversao', 'Faturado',
-          'Ticket', 'Tempo', 'Cancel.', 'Perdido'
-        ]],
-        body: dentSorted.map((d, i) => [
-          String(i + 1),
-          clean(d.nome),
-          String(d.total),
-          d.taxa + '%',
-          clean(fmtK(d.valor_aprovado)),
-          clean(fmtK(d.ticket_medio)),
-          d.tempo_medio + 'd',
-          String(d.cancelados),
-          clean(fmtK(d.valor_perdido)),
-        ]),
-        theme: 'plain',
-        styles: { font: 'helvetica', fontSize: 7.5, textColor: cText, fillColor: cDark, cellPadding: { top: 2.5, bottom: 2.5, left: 2, right: 2 } },
-        headStyles: { fillColor: cSurf2, textColor: cAccent, fontSize: 7, fontStyle: 'bold' },
-        alternateRowStyles: { fillColor: cSurf },
-        columnStyles: {
-          0: { cellWidth: 7, halign: 'center' },
-          1: { cellWidth: 36 },
-          2: { cellWidth: 16, halign: 'center' },
-          3: { cellWidth: 18, halign: 'center' },
-          4: { cellWidth: 26 },
-          5: { cellWidth: 22 },
-          6: { cellWidth: 13, halign: 'center' },
-          7: { cellWidth: 13, halign: 'center' },
-          8: { cellWidth: 22 },
-        },
-        margin: { left: mg, right: mg },
-        didParseCell: (d) => {
-          if (d.section === 'body') {
-            if (d.column.index === 3) {
-              const v = parseFloat(d.cell.raw);
-              d.cell.styles.textColor = v >= (_benchmarks.conversaoIdeal || 75) ? cGreen : v >= (_benchmarks.conversaoCritica || 60) ? cYellow : cRed;
-              d.cell.styles.fontStyle = 'bold';
-            }
-            if (d.column.index === 4) d.cell.styles.textColor = cGreen;
-            if (d.column.index === 8) d.cell.styles.textColor = cRed;
-          }
-        }
+      const sortedD = [...M.dentistas].sort((a, b) => b.valor_aprovado - a.valor_aprovado);
+      const thD = ['#', clean(vLabel), 'Orcamentos', 'Conversao', 'Faturado', 'Ticket', 'Tempo', 'Cancel.', 'Perdido'];
+      const cwD = [8, 34, 20, 20, 26, 20, 16, 16, 22];
+      let xd = mg;
+      doc.setFillColor(...cSurf2);
+      doc.roundedRect(mg, y, W - mg * 2, 8, 1, 1, 'F');
+      thD.forEach((h, i) => {
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(6.5); doc.setTextColor(...cAccent);
+        doc.text(h, xd + 1, y + 5); xd += cwD[i];
       });
-      y = doc.lastAutoTable ? doc.lastAutoTable.finalY + 6 : y + 40;
-
-      // Grafico de barras simples — faturamento por vendedor
-      if (y + 50 < 275) {
-        y = secTitle('Faturamento por ' + clean(vLabel), y);
-        const maxFat = Math.max(...dentSorted.map(d => d.valor_aprovado), 1);
-        const barH = 6, gap = 3;
-        const labelW = 42;
-        const valueW = 28;
-        const barAreaW = W - mg * 2 - labelW - valueW - 4;
-
-        dentSorted.slice(0, 8).forEach((d, i) => {
-          const ky = y + i * (barH + gap);
-          if (ky > 275) return;
-          const fill = Math.max((d.valor_aprovado / maxFat) * barAreaW, 1);
-
-          // Nome fixo esquerda
-          doc.setFont('helvetica', 'normal');
-          doc.setFontSize(6.5);
-          doc.setTextColor(...cMuted);
-          doc.text(clean(d.nome).substring(0, 22), mg, ky + barH - 1);
-
-          // Barra central — sempre verde pois é faturamento
-          const barX = mg + labelW;
-          doc.setFillColor(...cSurf2);
-          doc.roundedRect(barX, ky, barAreaW, barH, 1, 1, 'F');
-          doc.setFillColor(...cGreen);
-          doc.roundedRect(barX, ky, fill, barH, 1, 1, 'F');
-
-          // Valor fixo direita — sempre verde
-          const valX = mg + labelW + barAreaW + 3;
-          doc.setFont('helvetica', 'bold');
-          doc.setFontSize(6.5);
-          doc.setTextColor(...cGreen);
-          doc.text(clean(fmtK(d.valor_aprovado)), valX + valueW, ky + barH - 1, { align: 'right' });
+      y += 10;
+      sortedD.forEach((d, ri) => {
+        if (y > 270) { addFooter(pagNum, totalPags); doc.addPage(); pagNum++; pageBg(); y = 14; }
+        if (ri % 2 === 0) { doc.setFillColor(...cSurf); doc.roundedRect(mg, y - 1, W - mg * 2, 8, 1, 1, 'F'); }
+        const cols = [
+          String(ri + 1), clean(d.nome), String(d.total), d.taxa + '%',
+          clean(fmtK(d.valor_aprovado)), clean(fmtK(d.ticket_medio)),
+          d.tempo_medio + 'd', String(d.cancelados), clean(fmtK(d.valor_perdido))
+        ];
+        const tcs = [cMuted, cText, cMuted, d.taxa >= (_benchmarks.conversaoIdeal || 75) ? cGreen : d.taxa >= (_benchmarks.conversaoCritica || 60) ? cYellow : cRed, cGreen, cText, cMuted, cOrange, cRed];
+        xd = mg;
+        cols.forEach((col, i) => {
+          doc.setFont('helvetica', i === 1 ? 'bold' : 'normal');
+          doc.setFontSize(6.5); doc.setTextColor(...tcs[i]);
+          doc.text(col, xd + 1, y + 5); xd += cwD[i];
         });
-        y += dentSorted.slice(0, 8).length * (barH + gap) + 6;
-      }
+        y += 8;
+      });
+      y += 4;
 
-      addFooter(pagNum++, '5');
-      doc.addPage();
+      // barras faturamento
+      y = secTitle('Faturamento por ' + clean(vLabel), y);
+      const maxFB = Math.max(...sortedD.map(d => d.valor_aprovado), 1);
+      sortedD.slice(0, 8).forEach(d => {
+        if (y > 272) return;
+        const bw = (d.valor_aprovado / maxFB) * (W - mg * 2 - 50);
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(7); doc.setTextColor(...cText);
+        doc.text(clean(d.nome), mg, y + 4);
+        doc.setFillColor(...cSurf2);
+        doc.roundedRect(mg + 40, y, W - mg * 2 - 50, 5, 1, 1, 'F');
+        doc.setFillColor(...cAccent);
+        doc.roundedRect(mg + 40, y, Math.max(bw, 1), 5, 1, 1, 'F');
+        doc.setTextColor(...cGreen); doc.setFontSize(6.5);
+        doc.text(clean(fmtK(d.valor_aprovado)), W - mg - 2, y + 4, { align: 'right' });
+        y += 8;
+      });
 
-      // ══════════════════════════════════
-      //  PAGINA 3 — CANAIS + PROJECAO
-      // ══════════════════════════════════
-      pageBg();
+      addFooter(pagNum, totalPags);
+
+      // ══════════════════════════════════════
+      // PÁGINA 3 — CANAIS
+      // ══════════════════════════════════════
+      doc.addPage(); pagNum++; pageBg();
       y = 14;
-
-      // ── CANAIS ──
       y = secTitle('Canais de Marketing', y);
-      const canaisSorted = [...M.canais].sort((a, b) => b.valor - a.valor);
-      doc.autoTable({
-        startY: y,
-        head: [['Canal', 'Total', 'Aprovados', 'Conversao', 'Receita', 'Ticket Medio']],
-        body: canaisSorted.map(c => [
-          clean(canalDisplay(c.canal)),
-          String(c.total),
-          String(c.aprovados),
-          c.taxa + '%',
-          clean(fmtK(c.valor)),
-          clean(fmtK(c.ticket)),
-        ]),
-        theme: 'plain',
-        styles: { font: 'helvetica', fontSize: 8, textColor: cText, fillColor: cDark, cellPadding: { top: 3, bottom: 3, left: 3, right: 3 } },
-        headStyles: { fillColor: cSurf2, textColor: cAccent, fontSize: 7.5, fontStyle: 'bold' },
-        alternateRowStyles: { fillColor: cSurf },
-        columnStyles: {
-          0: { cellWidth: 40 },
-          1: { cellWidth: 18, halign: 'center' },
-          2: { cellWidth: 20, halign: 'center' },
-          3: { cellWidth: 22, halign: 'center' },
-          4: { cellWidth: 30 },
-          5: { cellWidth: 30 },
-        },
-        margin: { left: mg, right: mg },
-        didParseCell: (d) => {
-          if (d.section === 'body') {
-            if (d.column.index === 3) {
-              const v = parseFloat(d.cell.raw);
-              d.cell.styles.textColor = v >= 80 ? cGreen : v >= 60 ? cYellow : cRed;
-              d.cell.styles.fontStyle = 'bold';
-            }
-            if (d.column.index === 4) d.cell.styles.textColor = cGreen;
-          }
-        }
+      const sortedC = [...M.canais].sort((a, b) => b.valor - a.valor);
+      const thC = ['Canal', 'Total', 'Aprovados', 'Conversao', 'Receita', 'Ticket Medio'];
+      const cwC = [36, 18, 22, 22, 36, 28];
+      let xc = mg;
+      doc.setFillColor(...cSurf2);
+      doc.roundedRect(mg, y, W - mg * 2, 8, 1, 1, 'F');
+      thC.forEach((h, i) => {
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(6.5); doc.setTextColor(...cAccent);
+        doc.text(h, xc + 1, y + 5); xc += cwC[i];
       });
-      y = doc.lastAutoTable ? doc.lastAutoTable.finalY + 6 : y + 40;
-
-      // Barras de conversao por canal
-      if (y + 60 < 265) {
-        y = secTitle('Conversao e Receita por Canal', y);
-
-        const labelW2 = 38;
-        const valueW2 = 28;
-        const barAreaW2 = W - mg * 2 - labelW2 - valueW2 - 4;
-        const barH2 = 7, gap2 = 4;
-
-        canaisSorted.forEach((c, i) => {
-          const ky = y + i * (barH2 + gap2);
-          if (ky + barH2 > 262) return;
-
-          const nom = clean(canalDisplay(c.canal));
-          // cor condicional APENAS para conversao
-          const cor = c.taxa >= 80 ? cGreen : c.taxa >= 60 ? cYellow : cRed;
-
-          // Nome fixo esquerda
-          doc.setFont('helvetica', 'normal');
-          doc.setFontSize(6.5);
-          doc.setTextColor(...cMuted);
-          doc.text(nom.substring(0, 16), mg, ky + barH2 - 1);
-
-          const barX = mg + labelW2;
-          const convW = Math.floor(barAreaW2 * 0.38);
-          const recW = barAreaW2 - convW - 2;
-
-          // Barra conversao — cor condicional
-          const convFill = Math.max((c.taxa / 100) * convW, 1);
-          doc.setFillColor(...cSurf2);
-          doc.roundedRect(barX, ky, convW, barH2, 1, 1, 'F');
-          doc.setFillColor(...cor);
-          doc.roundedRect(barX, ky, convFill, barH2, 1, 1, 'F');
-
-          // Percentual conversao
-          doc.setFont('helvetica', 'bold');
-          doc.setFontSize(6);
-          doc.setTextColor(...cor);
-          doc.text(c.taxa + '%', barX + convW + 1, ky + barH2 - 1);
-
-          // Barra receita — sempre verde
-          const maxRec2 = Math.max(...canaisSorted.map(cc => cc.valor), 1);
-          const recFill = Math.max((c.valor / maxRec2) * recW, 1);
-          const recX = barX + convW + 8;
-          doc.setFillColor(...cSurf2);
-          doc.roundedRect(recX, ky, recW, barH2, 1, 1, 'F');
-          doc.setFillColor(...cGreen);
-          doc.roundedRect(recX, ky, recFill, barH2, 1, 1, 'F');
-
-          // Valor receita fixo direita — sempre verde
-          const valX = mg + labelW2 + barAreaW2 + 3;
-          doc.setFont('helvetica', 'bold');
-          doc.setFontSize(6.5);
-          doc.setTextColor(...cGreen);
-          doc.text(clean(fmtK(c.valor)), valX + valueW2, ky + barH2 - 1, { align: 'right' });
+      y += 10;
+      sortedC.forEach((c, ri) => {
+        if (ri % 2 === 0) { doc.setFillColor(...cSurf); doc.roundedRect(mg, y - 1, W - mg * 2, 8, 1, 1, 'F'); }
+        const colsC = [clean(canalDisplay(c.canal)), String(c.total), String(c.aprovados), c.taxa + '%', clean(fmtK(c.valor)), clean(fmtK(c.ticket))];
+        const tcsC = [cText, cMuted, cMuted, taxaColor(c.taxa) === 'var(--green)' ? cGreen : taxaColor(c.taxa) === 'var(--yellow)' ? cYellow : cRed, cGreen, cText];
+        xc = mg;
+        colsC.forEach((col, i) => {
+          doc.setFont('helvetica', i === 0 ? 'bold' : 'normal');
+          doc.setFontSize(6.5); doc.setTextColor(...tcsC[i]);
+          doc.text(col, xc + 1, y + 5); xc += cwC[i];
         });
+        y += 8;
+      });
+      y += 6;
 
-        y += canaisSorted.length * (barH2 + gap2) + 8;
-      }
+      y = secTitle('Conversao e Receita por Canal', y);
+      const maxCV = Math.max(...sortedC.map(c => c.valor), 1);
+      sortedC.forEach(c => {
+        if (y > 265) return;
+        const bw = (c.valor / maxCV) * (W - mg * 2 - 60);
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(7); doc.setTextColor(...cText);
+        doc.text(clean(canalDisplay(c.canal)), mg, y + 4);
+        doc.setTextColor(...cAccent);
+        doc.text(c.taxa + '%', mg + 38, y + 4);
+        doc.setFillColor(...cSurf2);
+        doc.roundedRect(mg + 50, y, W - mg * 2 - 60, 5, 1, 1, 'F');
+        doc.setFillColor(79, 156, 249);
+        doc.roundedRect(mg + 50, y, Math.max(bw, 1), 5, 1, 1, 'F');
+        doc.setTextColor(...cGreen); doc.setFontSize(6.5);
+        doc.text(clean(fmtK(c.valor)), W - mg - 2, y + 4, { align: 'right' });
+        y += 8;
+      });
 
-      // ── PROJECAO ──
-      if (MONTHS.length >= 2 && y + 45 < 275) {
-        y = secTitle('Projecao para o Proximo Periodo', y);
-        const ultMeses = MONTHS.slice(-3);
-        const mediaRec = ultMeses.reduce((s, m) => s + m.geral.aprovado, 0) / ultMeses.length;
-        const tendRec = ultMeses.length >= 2 ? ultMeses[ultMeses.length - 1].geral.aprovado - ultMeses[0].geral.aprovado : 0;
-        const projecaoRec = Math.max(mediaRec + (tendRec / (ultMeses.length - 1 || 1)), 0);
-        const mediaConv = +(ultMeses.reduce((s, m) => s + m.geral.taxa, 0) / ultMeses.length).toFixed(1);
-        const varPct = g.aprovado > 0 ? +((projecaoRec - g.aprovado) / g.aprovado * 100).toFixed(1) : 0;
-        const corProj = projecaoRec >= g.aprovado ? cGreen : cRed;
+      addFooter(pagNum, totalPags);
 
-        doc.setFillColor(...cSurf);
-        doc.roundedRect(mg, y, W - mg * 2, 36, 2, 2, 'F');
-        doc.setFillColor(...corProj);
-        doc.rect(mg, y, W - mg * 2, 1.5, 'F');
+      // ══════════════════════════════════════
+      // PÁGINA 4 — VENCIDOS + INSIGHTS
+      // ══════════════════════════════════════
+      doc.addPage(); pagNum++; pageBg();
+      y = 14;
 
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(7);
-        doc.setTextColor(...cMuted);
-        doc.text('RECEITA PROJETADA', mg + 4, y + 7);
-
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(14);
-        doc.setTextColor(...corProj);
-        doc.text(clean(fmtK(projecaoRec)), mg + 4, y + 17);
-
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(9);
-        const varTxt = (varPct >= 0 ? '+ ' : '- ') + Math.abs(varPct) + '% vs ' + clean(M.periodo);
-        doc.setTextColor(...corProj);
-        doc.text(varTxt, W - mg - 4, y + 17, { align: 'right' });
-
-        doc.setFont('helvetica', 'normal');
-        doc.setFontSize(7.5);
-        doc.setTextColor(...cText);
-        doc.text('Conversao projetada: ' + mediaConv + '%   |   Base: media dos ultimos ' + ultMeses.length + ' meses', mg + 4, y + 24);
-
-        doc.setFont('helvetica', 'italic');
-        doc.setFontSize(7);
-        doc.setTextColor(...cMuted);
-        doc.text('* Projecao linear simples. Nao considera sazonalidade ou fatores externos.', mg + 4, y + 31);
-        y += 40;
-
-        // Mini tabela base da projecao
-        if (y + 30 < 275) {
-          doc.autoTable({
-            startY: y,
-            head: [['Periodo', 'Receita', 'Conversao', 'Score']],
-            body: ultMeses.map(m => [clean(m.periodo), clean(fmtK(m.geral.aprovado)), m.geral.taxa + '%', m.score + '/100']),
-            theme: 'plain',
-            styles: { font: 'helvetica', fontSize: 7.5, textColor: cText, fillColor: cDark, cellPadding: { top: 2.5, bottom: 2.5, left: 3, right: 3 } },
-            headStyles: { fillColor: cSurf2, textColor: cAccent, fontSize: 7, fontStyle: 'bold' },
-            alternateRowStyles: { fillColor: cSurf },
-            columnStyles: { 0: { cellWidth: 50 }, 1: { cellWidth: 40 }, 2: { cellWidth: 30 }, 3: { cellWidth: 30 } },
-            margin: { left: mg, right: mg },
+      // vencidos
+      const topVenc = M.topVencidos.slice(0, 8);
+      if (topVenc.length > 0) {
+        y = secTitle(pLabelP + ' Vencidos — Prioridade de Follow-up', y);
+        const thV = [clean(cLabel), clean(vLabel), 'Canal', 'Valor', 'Emissao', 'Dias'];
+        const cwV = [46, 32, 26, 26, 22, 14];
+        let xv = mg;
+        doc.setFillColor(...cSurf2);
+        doc.roundedRect(mg, y, W - mg * 2, 8, 1, 1, 'F');
+        thV.forEach((h, i) => {
+          doc.setFont('helvetica', 'bold'); doc.setFontSize(6.5); doc.setTextColor(...cAccent);
+          doc.text(h, xv + 1, y + 5); xv += cwV[i];
+        });
+        y += 10;
+        topVenc.forEach((v, ri) => {
+          if (ri % 2 === 0) { doc.setFillColor(...cSurf); doc.roundedRect(mg, y - 1, W - mg * 2, 8, 1, 1, 'F'); }
+          const dias = v.emissao ? Math.floor((Date.now() - v.emissao.getTime()) / 86400000) : null;
+          const colsV = [
+            clean(v.paciente || '—').substring(0, 24),
+            clean(v.dentista || '—').substring(0, 18),
+            clean(canalDisplay(v.campanha || '')),
+            clean(fmtK(v.total)),
+            v.emissao ? v.emissao.toLocaleDateString('pt-BR') : '—',
+            dias !== null ? String(dias) : '—'
+          ];
+          xv = mg;
+          colsV.forEach((col, i) => {
+            doc.setFont('helvetica', i === 0 ? 'bold' : 'normal');
+            doc.setFontSize(6.5);
+            doc.setTextColor(i === 3 ? cRed[0] : cText[0], i === 3 ? cRed[1] : cText[1], i === 3 ? cRed[2] : cText[2]);
+            doc.text(col, xv + 1, y + 5); xv += cwV[i];
           });
-          y = doc.lastAutoTable ? doc.lastAutoTable.finalY + 6 : y + 20;
-        }
+          y += 8;
+        });
+        y += 6;
       }
 
-      addFooter(pagNum++, '5');
-      doc.addPage();
-
-      // ══════════════════════════════════
-      //  PAGINA 4 — ALERTAS + ACOES
-      // ══════════════════════════════════
-      pageBg();
-      y = 14;
-
-      y = secTitle('Analise Inteligente', y);
-      const insights = generateInsights(M);
-      insights.sort((a, b) => ({ 'a': 0, 'o': 1, 'w': 2, 'i': 3, 'g': 4 }[a.t] || 9) - ({ 'a': 0, 'o': 1, 'w': 2, 'i': 3, 'g': 4 }[b.t] || 9));
-
-      insights.forEach(ins => {
-        // Se nao couber, adiciona nova pagina MAS mantém como pagina de alertas
-        if (y + 28 > 268) {
-          addFooter(pagNum++, temDespesas ? '6' : '5');
-          doc.addPage();
-          pageBg();
-          y = 14;
-          y = secTitle('Analise Inteligente (cont.)', y);
-        }
-        const cor = ins.t === 'a' ? cRed : ins.t === 'w' ? cYellow : ins.t === 'g' ? cGreen : ins.t === 'o' ? cOrange : cAccent;
+      // insights
+      y = secTitle('Insights e Alertas Automaticos', y);
+      const ins = generateInsights(M);
+      ins.sort((a, b) => ({ 'a': 0, 'o': 1, 'w': 2, 'i': 3, 'g': 4 }[a.t] || 9) - ({ 'a': 0, 'o': 1, 'w': 2, 'i': 3, 'g': 4 }[b.t] || 9));
+      const insColorMap = { a: cRed, o: cOrange, w: cYellow, i: cAccent, g: cGreen };
+      ins.forEach(i => {
+        if (y > 265) return;
+        const ic = insColorMap[i.t] || cAccent;
         doc.setFillColor(...cSurf);
-        doc.roundedRect(mg, y, W - mg * 2, 24, 2, 2, 'F');
-        doc.setFillColor(...cor);
-        doc.rect(mg, y, 3.5, 24, 'F');
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(8);
-        doc.setTextColor(...cor);
-        doc.text(clean(ins.l), mg + 6, y + 7);
-        doc.setFont('helvetica', 'normal');
-        doc.setFontSize(7.5);
-        doc.setTextColor(...cText);
-        const txtLines = doc.splitTextToSize(clean(ins.txt), W - mg * 2 - 14);
-        doc.text(txtLines.slice(0, 2), mg + 6, y + 13);
-        doc.setFont('helvetica', 'italic');
-        doc.setFontSize(7);
-        doc.setTextColor(...cMuted);
-        doc.text(clean(ins.sub).substring(0, 90), mg + 6, y + 20);
-        y += 27;
+        doc.roundedRect(mg, y, W - mg * 2, 16, 2, 2, 'F');
+        doc.setFillColor(...ic);
+        doc.rect(mg, y, 2, 16, 'F');
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(7.5); doc.setTextColor(...ic);
+        doc.text(clean(i.l), mg + 5, y + 6);
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(7); doc.setTextColor(...cText);
+        doc.text(clean(i.txt), mg + 5, y + 11);
+        doc.setTextColor(...cMuted); doc.setFontSize(6.5);
+        doc.text(clean(i.sub), mg + 5, y + 15);
+        y += 19;
       });
 
-      addFooter(pagNum++, temDespesas ? '6' : '5');
-      doc.addPage();
+      addFooter(pagNum, totalPags);
 
-      // ══════════════════════════════════
-      //  PAGINA 5 — ACOES PRIORITARIAS (PAGINA PROPRIA)
-      // ══════════════════════════════════
-      pageBg();
+      // ══════════════════════════════════════
+      // PÁGINA 5 — AÇÕES
+      // ══════════════════════════════════════
+      doc.addPage(); pagNum++; pageBg();
       y = 14;
-
-      // Cabecalho destacado da pagina de acoes
-      doc.setFillColor(...cSurf);
-      doc.roundedRect(mg, y, W - mg * 2, 14, 2, 2, 'F');
-      doc.setFillColor(...cGreen);
-      doc.rect(mg, y, 5, 14, 'F');
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(10);
-      doc.setTextColor(...cText);
-      doc.text('Acoes Prioritarias — ' + clean(M.periodo), mg + 8, y + 9);
-      y += 18;
-
-      const prev2_ = (activeYear === null && activeMonth > 0) ? MONTHS[activeMonth - 1] : null;
-      const acoes = getAcoesList(M, prev2_);
-
+      y = secTitle('Plano de Acao — Proximos Passos', y);
+      const acoes = getAcoesList(M, prev_);
+      const priC = { ph: cRed, pm: cYellow, pl: cGreen };
+      const priL = { ph: 'URGENTE', pm: 'ESTA SEMANA', pl: 'ESTE MES' };
       acoes.forEach((a, i) => {
-        // Nova pagina se nao couber
-        if (y + 28 > 272) {
-          addFooter(pagNum++, temDespesas ? '6' : '5');
-          doc.addPage();
-          pageBg();
-          y = 14;
-          y = secTitle('Acoes Prioritarias (cont.)', y);
-        }
-        const cor = a.p === 'ph' ? cRed : a.p === 'pm' ? cYellow : cGreen;
-        const lbl = { ph: 'URGENTE', pm: 'ESTA SEMANA', pl: 'ESTE MES' };
-
+        if (y > 265) return;
+        const pc = priC[a.p] || cAccent;
         doc.setFillColor(...cSurf);
-        doc.roundedRect(mg, y, W - mg * 2, 24, 2, 2, 'F');
-        doc.setFillColor(...cor);
-        doc.rect(mg, y, 3.5, 24, 'F');
-
-        // Numero da acao
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(10);
-        doc.setTextColor(...cor);
-        doc.text(String(i + 1), mg + 1.5, y + 14, { align: 'center' });
-
-        // Titulo
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(8);
-        doc.setTextColor(...cor);
-        doc.text(clean(a.t), mg + 6, y + 7);
-
-        // Badge prioridade — direita, sem sumir
-        const lblTxt = lbl[a.p];
-        doc.setFillColor(...cor);
-        doc.setFillColor(cor[0], cor[1], cor[2], .15);
-        // fundo do badge
-        const badgeW = 24, badgeH = 5, badgeX = W - mg - badgeW, badgeY = y + 3;
-        doc.setFillColor(cor[0] * .3, cor[1] * .3, cor[2] * .3);
-        doc.roundedRect(badgeX, badgeY, badgeW, badgeH, 1, 1, 'F');
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(6);
-        doc.setTextColor(...cor);
-        doc.text(lblTxt, badgeX + badgeW / 2, badgeY + 3.5, { align: 'center' });
-
-        // Descricao
-        doc.setFont('helvetica', 'normal');
-        doc.setFontSize(7.5);
-        doc.setTextColor(...cText);
-        const descLines = doc.splitTextToSize(clean(a.d), W - mg * 2 - 14);
-        doc.text(descLines.slice(0, 2), mg + 6, y + 14);
-
-        y += 27;
+        doc.roundedRect(mg, y, W - mg * 2, 20, 2, 2, 'F');
+        doc.setFillColor(...pc);
+        doc.rect(mg, y, 2, 20, 'F');
+        doc.setFillColor(...pc);
+        doc.roundedRect(W - mg - 30, y + 3, 30, 7, 1, 1, 'F');
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(6.5); doc.setTextColor(...cDark);
+        doc.text(priL[a.p] || '', W - mg - 15, y + 8, { align: 'center' });
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(8); doc.setTextColor(...cText);
+        doc.text((i + 1) + '. ' + clean(a.t), mg + 5, y + 8);
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(7); doc.setTextColor(...cMuted);
+        const dLines = doc.splitTextToSize(clean(a.d), W - mg * 2 - 40);
+        doc.text(dLines[0] || '', mg + 5, y + 14);
+        y += 23;
       });
 
-      addFooter(pagNum++, temDespesas ? '6' : '5');
+      addFooter(pagNum, totalPags);
 
-      // ══════════════════════════════════
-      //  PAGINA 5 — DESPESAS (SO SE HOUVER)
-      // ══════════════════════════════════
-      if (temDespesas) {
-        doc.addPage();
-        pageBg();
+      // ══════════════════════════════════════
+      // PÁGINA 6 — ANÁLISE FINANCEIRA (se houver)
+      // ══════════════════════════════════════
+      if (hasFin) {
+        doc.addPage(); pagNum++; pageBg();
         y = 14;
 
-        // Cabecalho
-        doc.setFillColor(...cSurf);
-        doc.roundedRect(mg, y, W - mg * 2, 14, 2, 2, 'F');
-        doc.setFillColor(...cRed);
-        doc.rect(mg, y, 5, 14, 'F');
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(10);
-        doc.setTextColor(...cText);
-        doc.text('Analise Financeira | ' + clean(M.periodo), mg + 8, y + 9);
-        y += 18;
+        // detecta fonte e meses
+        const anoAtivo = M.ano || (activeYear !== null ? +activeYear : null);
+        const chavesMeses = anoAtivo
+          ? getMesesFinanceirosPorAno(anoAtivo)
+          : (M.key && !M.isYear && !M.isRange ? [M.key] : []);
 
-        // KPIs financeiros
-        y = secTitle('Resumo Financeiro', y);
-        const fat = g.aprovado, desp = g.despesas, lucro = fat - desp;
-        const margem = g.margem !== null ? g.margem : 0;
-        const ratio = fat > 0 ? +((desp / fat) * 100).toFixed(1) : 0;
-        const marColor = margem >= (_benchmarks.margemIdeal || 20) ? cGreen : margem >= (_benchmarks.margemBaixa || 10) ? cYellow : margem >= 0 ? cOrange : cRed;
-        const finKpis = [
-          { l: 'Receita Total', v: fmtK(fat), s: 'faturamento aprovado', c: cGreen },
-          { l: 'Despesas Totais', v: fmtK(desp), s: ratio + '% da receita', c: cRed },
-          { l: 'Lucro Liquido', v: fmtK(lucro), s: lucro >= 0 ? 'resultado positivo' : 'resultado negativo', c: lucro >= 0 ? cGreen : cRed },
-          { l: 'Margem Liquida', v: margem + '%', s: margem >= 20 ? 'excelente' : margem >= 10 ? 'saudavel' : margem >= 0 ? 'baixa' : 'negativa', c: marColor },
+        const usaFaturamento = _finModoReceita === 'faturamento' && chavesMeses.some(k => parsedFaturamento[k] !== undefined);
+        const fonteLabel = usaFaturamento ? 'faturamento real (caixa)' : 'orcamentos aprovados';
+
+        // agrega totais
+        let fatTotalFin = 0, despTotalFin = 0;
+        const mesesFinData = chavesMeses.map(k => {
+          const mfin = getFinMesDataComReceita(k);
+          if (!mfin || mfin._semDados) return null;
+          fatTotalFin += mfin.geral.aprovado;
+          despTotalFin += mfin.geral.despesas;
+          return mfin;
+        }).filter(Boolean);
+
+        const lucroTotalFin = fatTotalFin - despTotalFin;
+        const margemTotalFin = fatTotalFin > 0 ? +((lucroTotalFin / fatTotalFin) * 100).toFixed(1) : 0;
+        const ratioFin = fatTotalFin > 0 ? +((despTotalFin / fatTotalFin) * 100).toFixed(1) : 0;
+        const marColorFin = margemTotalFin >= (_benchmarks.margemIdeal || 20) ? cGreen
+          : margemTotalFin >= (_benchmarks.margemBaixa || 10) ? cYellow
+          : margemTotalFin >= 0 ? cOrange : cRed;
+        const marLabelFin = margemTotalFin >= (_benchmarks.margemIdeal || 20) ? 'excelente'
+          : margemTotalFin >= (_benchmarks.margemBaixa || 10) ? 'saudavel'
+          : margemTotalFin >= 0 ? 'baixa' : 'negativa';
+
+        // título
+        y = secTitle('Analise Financeira | ' + clean(M.periodo), y);
+
+        // badge fonte
+        doc.setFillColor(...cSurf2);
+        doc.roundedRect(mg, y, W - mg * 2, 9, 1, 1, 'F');
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(7); doc.setTextColor(...cMuted);
+        doc.text('Receita baseada em: ', mg + 3, y + 6);
+        doc.setFont('helvetica', 'bold'); doc.setTextColor(...cAccent);
+        doc.text(fonteLabel, mg + 38, y + 6);
+        y += 13;
+
+        // 4 KPIs financeiros
+        const kfin = [
+          { l: 'Receita Total',    v: fmtK(fatTotalFin),    s: fonteLabel,                                           c: cGreen },
+          { l: 'Despesas Totais',  v: fmtK(despTotalFin),   s: ratioFin + '% da receita',                            c: cRed },
+          { l: 'Lucro Liquido',    v: fmtK(lucroTotalFin),  s: lucroTotalFin >= 0 ? 'resultado positivo' : 'prejuizo', c: lucroTotalFin >= 0 ? cGreen : cRed },
+          { l: 'Margem Liquida',   v: margemTotalFin + '%', s: marLabelFin,                                          c: marColorFin },
         ];
-        const fkw = (W - mg * 2 - 6) / 2;
-        finKpis.forEach(({ l, v, s, c }, i) => {
-          const col = i % 2, row = Math.floor(i / 2);
-          const x = mg + col * (fkw + 6), ky = y + row * 24;
+        const kfw = (W - mg * 2 - 6) / 4;
+        kfin.forEach(({ l, v, s, c }, i) => {
+          const x = mg + i * (kfw + 2);
           doc.setFillColor(...cSurf);
-          doc.roundedRect(x, ky, fkw, 22, 2, 2, 'F');
+          doc.roundedRect(x, y, kfw, 20, 2, 2, 'F');
           doc.setFillColor(...c);
-          doc.rect(x, ky, fkw, 2, 'F');
-          doc.setFont('helvetica', 'bold');
-          doc.setFontSize(6.5);
-          doc.setTextColor(...cMuted);
-          doc.text(clean(l).toUpperCase(), x + 4, ky + 8);
-          doc.setFont('helvetica', 'bold');
-          doc.setFontSize(13);
-          doc.setTextColor(...c);
-          doc.text(clean(v), x + 4, ky + 16);
-          doc.setFont('helvetica', 'normal');
-          doc.setFontSize(7);
-          doc.setTextColor(...cMuted);
-          doc.text(clean(s), x + 4 + clean(v).length * 3, ky + 16);
+          doc.rect(x, y, kfw, 1.5, 'F');
+          doc.setFont('helvetica', 'bold'); doc.setFontSize(6); doc.setTextColor(...cMuted);
+          doc.text(clean(l).toUpperCase(), x + 2, y + 6);
+          doc.setFont('helvetica', 'bold'); doc.setFontSize(10); doc.setTextColor(...c);
+          doc.text(clean(v), x + 2, y + 13);
+          doc.setFont('helvetica', 'normal'); doc.setFontSize(6); doc.setTextColor(...cMuted);
+          doc.text(clean(s), x + 2, y + 18);
         });
-        y += 54;
+        y += 24;
 
-        // Barra receita vs despesas
+        // barra resumo receita vs despesas vs lucro
         y = secTitle('Receita vs Despesas vs Lucro', y);
-        const maxVal = Math.max(fat, desp, Math.abs(lucro), 1);
-        const barMaxW = W - mg * 2 - 50;
-        [
-          { l: 'Receita', v: fat, c: cGreen },
-          { l: 'Despesas', v: desp, c: cRed },
-          { l: 'Lucro Liquido', v: lucro, c: lucro >= 0 ? cGreen : cRed },
-        ].forEach(({ l, v, c }, i) => {
-          const ky = y + i * 14;
-          doc.setFont('helvetica', 'bold');
-          doc.setFontSize(7.5);
-          doc.setTextColor(...cMuted);
-          doc.text(l, mg, ky + 8);
+        const maxBarFin = Math.max(fatTotalFin, despTotalFin, Math.abs(lucroTotalFin), 1);
+        const barItems = [
+          { l: 'Receita',      v: fatTotalFin,    c: cGreen },
+          { l: 'Despesas',     v: despTotalFin,   c: cRed },
+          { l: 'Lucro Liquido', v: lucroTotalFin, c: lucroTotalFin >= 0 ? [79, 156, 249] : cOrange },
+        ];
+        barItems.forEach(b => {
+          const bw = (Math.abs(b.v) / maxBarFin) * (W - mg * 2 - 50);
+          doc.setFont('helvetica', 'normal'); doc.setFontSize(7); doc.setTextColor(...cText);
+          doc.text(clean(b.l), mg, y + 4);
           doc.setFillColor(...cSurf2);
-          doc.roundedRect(mg + 38, ky, barMaxW, 9, 2, 2, 'F');
-          const fill = Math.max((Math.abs(v) / maxVal) * barMaxW, 2);
-          doc.setFillColor(...c);
-          doc.roundedRect(mg + 38, ky, fill, 9, 2, 2, 'F');
-          doc.setFont('helvetica', 'bold');
-          doc.setFontSize(7.5);
-          doc.setTextColor(...c);
-          doc.text(clean(fmtK(v)), W - mg, ky + 8, { align: 'right' });
+          doc.roundedRect(mg + 36, y, W - mg * 2 - 46, 5, 1, 1, 'F');
+          doc.setFillColor(...b.c);
+          doc.roundedRect(mg + 36, y, Math.max(bw, 1), 5, 1, 1, 'F');
+          doc.setTextColor(...b.c); doc.setFontSize(6.5);
+          doc.text(clean(fmtK(b.v)), W - mg - 2, y + 4, { align: 'right' });
+          y += 8;
         });
-        y += 48;
+        y += 4;
 
-        // Evolucao por mes (se tiver mais de 1 mes)
-        const mesesComDesp = MONTHS.filter(m => m.geral.hasDespesas || parsedExpenses[m.key]);
-        if (mesesComDesp.length > 1 && y + 55 < 265) {
+        // tabela evolução mensal
+        if (mesesFinData.length > 0) {
           y = secTitle('Evolucao Financeira por Mes', y);
-          doc.autoTable({
-            startY: y,
-            head: [['Mes', 'Receita', 'Despesas', 'Lucro', 'Margem']],
-            body: mesesComDesp.map(m => {
-              const mf = m.geral.aprovado, md = m.geral.despesas, ml = mf - md;
-              const mm = mf > 0 ? +((ml / mf) * 100).toFixed(1) : 0;
-              return [clean(m.periodo), clean(fmtK(mf)), clean(fmtK(md)), clean(fmtK(ml)), mm + '%'];
-            }),
-            theme: 'plain',
-            styles: { font: 'helvetica', fontSize: 8, textColor: cText, fillColor: cDark, cellPadding: { top: 3, bottom: 3, left: 3, right: 3 } },
-            headStyles: { fillColor: cSurf2, textColor: cAccent, fontSize: 7.5, fontStyle: 'bold' },
-            alternateRowStyles: { fillColor: cSurf },
-            columnStyles: { 0: { cellWidth: 42 }, 1: { cellWidth: 36 }, 2: { cellWidth: 36 }, 3: { cellWidth: 36 }, 4: { cellWidth: 24, halign: 'center' } },
-            margin: { left: mg, right: mg },
-            didParseCell: (d) => {
-              if (d.section === 'body') {
-                if (d.column.index === 1) d.cell.styles.textColor = cGreen;
-                if (d.column.index === 2) d.cell.styles.textColor = cRed;
-                if (d.column.index === 3) {
-                  const v = parseFloat(String(d.cell.raw).replace(/[^0-9.-]/g, ''));
-                  d.cell.styles.textColor = v >= 0 ? cGreen : cRed;
-                  d.cell.styles.fontStyle = 'bold';
-                }
-                if (d.column.index === 4) {
-                  const v = parseFloat(d.cell.raw);
-                  d.cell.styles.textColor = v >= 20 ? cGreen : v >= 10 ? cYellow : v >= 0 ? cOrange : cRed;
-                  d.cell.styles.fontStyle = 'bold';
-                }
-              }
-            }
+          const thFin = ['Mes', 'Receita', 'Despesas', 'Lucro', 'Margem'];
+          const cwFin = [46, 34, 34, 34, 24];
+          let xf = mg;
+          doc.setFillColor(...cSurf2);
+          doc.roundedRect(mg, y, W - mg * 2, 8, 1, 1, 'F');
+          thFin.forEach((h, i) => {
+            doc.setFont('helvetica', 'bold'); doc.setFontSize(6.5); doc.setTextColor(...cAccent);
+            doc.text(h, xf + 1, y + 5); xf += cwFin[i];
           });
-          y = doc.lastAutoTable ? doc.lastAutoTable.finalY + 6 : y + 30;
+          y += 10;
+          mesesFinData.forEach((mf, ri) => {
+            if (y > 270) return;
+            const fat = mf.geral.aprovado;
+            const desp = mf.geral.despesas;
+            const luc = fat - desp;
+            const mar = fat > 0 ? +((luc / fat) * 100).toFixed(1) : 0;
+            const mc2 = mar >= (_benchmarks.margemIdeal || 20) ? cGreen
+              : mar >= (_benchmarks.margemBaixa || 10) ? cYellow
+              : mar >= 0 ? cOrange : cRed;
+            if (ri % 2 === 0) { doc.setFillColor(...cSurf); doc.roundedRect(mg, y - 1, W - mg * 2, 8, 1, 1, 'F'); }
+            const rowCols = [clean(mf.periodo), clean(fmtK(fat)), clean(fmtK(desp)), clean(fmtK(luc)), mar + '%'];
+            const rowColors = [cText, cGreen, cRed, luc >= 0 ? cGreen : cRed, mc2];
+            xf = mg;
+            rowCols.forEach((col, i) => {
+              doc.setFont('helvetica', i === 0 ? 'bold' : 'normal');
+              doc.setFontSize(6.5); doc.setTextColor(...rowColors[i]);
+              doc.text(col, xf + 1, y + 5); xf += cwFin[i];
+            });
+            y += 8;
+          });
+          y += 6;
         }
 
-        // Insights financeiros
-        if (y + 24 < 270) {
-          y = secTitle('Alertas Financeiros', y);
-          const insFinanceiros = generateFinancialInsights(mesesComDesp.length > 0 ? mesesComDesp : [M]);
-          insFinanceiros.slice(0, 4).forEach(ins => {
-            if (y + 20 > 270) return;
-            const cor = ins.t === 'a' ? cRed : ins.t === 'w' ? cYellow : ins.t === 'g' ? cGreen : cAccent;
+        // insights financeiros
+        const insFinPDF = generateFinancialInsights(mesesFinData);
+        insFinPDF.sort((a, b) => ({ 'a': 0, 'o': 1, 'w': 2, 'i': 3, 'g': 4 }[a.t] || 9) - ({ 'a': 0, 'o': 1, 'w': 2, 'i': 3, 'g': 4 }[b.t] || 9));
+        if (insFinPDF.length > 0 && y < 260) {
+          y = secTitle('Analise Financeira Automatica', y);
+          insFinPDF.slice(0, 4).forEach(i => {
+            if (y > 268) return;
+            const ic = insColorMap[i.t] || cAccent;
             doc.setFillColor(...cSurf);
-            doc.roundedRect(mg, y, W - mg * 2, 18, 2, 2, 'F');
-            doc.setFillColor(...cor);
-            doc.rect(mg, y, 3.5, 18, 'F');
-            doc.setFont('helvetica', 'bold');
-            doc.setFontSize(7.5);
-            doc.setTextColor(...cor);
-            doc.text(clean(ins.l), mg + 6, y + 6);
-            doc.setFont('helvetica', 'normal');
-            doc.setFontSize(7);
-            doc.setTextColor(...cText);
-            doc.text(clean(ins.txt).substring(0, 90), mg + 6, y + 11);
-            doc.setTextColor(...cMuted);
-            doc.text(clean(ins.sub).substring(0, 80), mg + 6, y + 16);
-            y += 21;
+            doc.roundedRect(mg, y, W - mg * 2, 16, 2, 2, 'F');
+            doc.setFillColor(...ic);
+            doc.rect(mg, y, 2, 16, 'F');
+            doc.setFont('helvetica', 'bold'); doc.setFontSize(7.5); doc.setTextColor(...ic);
+            doc.text(clean(i.l), mg + 5, y + 6);
+            doc.setFont('helvetica', 'normal'); doc.setFontSize(7); doc.setTextColor(...cText);
+            doc.text(clean(i.txt), mg + 5, y + 11);
+            doc.setTextColor(...cMuted); doc.setFontSize(6.5);
+            doc.text(clean(i.sub), mg + 5, y + 15);
+            y += 19;
           });
         }
 
-        addFooter(pagNum, '5');
+        // rodapé final na última página
+        doc.setFillColor(...cSurf);
+        doc.roundedRect(mg, y + 4, W - mg * 2, 18, 2, 2, 'F');
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(...cAccent);
+        doc.text('Metrik — Dashboard Comercial', W / 2, y + 13, { align: 'center' });
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(7); doc.setTextColor(...cMuted);
+        doc.text('Relatorio gerado automaticamente. Os dados refletem o periodo: ' + clean(M.periodo), W / 2, y + 18, { align: 'center' });
+        doc.text('Gerado em ' + new Date().toLocaleDateString('pt-BR') + ' — Confidencial', W / 2, y + 22, { align: 'center' });
+
+        addFooter(pagNum, totalPags);
       }
 
-      const nomeArq = clean(CFG.empresa || 'Dashboard').replace(/\s+/g, '_');
-      const periodo = clean(M.periodo).replace(/\s+/g, '_');
-      doc.save(nomeArq + '_' + periodo + '.pdf');
-
-    } catch (e) {
-      console.error('Erro PDF:', e);
-      alert('Erro ao gerar PDF: ' + e.message);
+      const nomeArq = (CFG.empresa || 'Metrik').replace(/[^a-zA-Z0-9]/g, '_');
+      const periodoArq = M.periodo.replace(/[^a-zA-Z0-9]/g, '_');
+      doc.save('Metrik_' + nomeArq + '_' + periodoArq + '.pdf');
+      overlay.classList.remove('show');
+      showToast('PDF exportado com ' + pagNum + ' paginas.');
+    } catch (err) {
+      overlay.classList.remove('show');
+      showToast('Erro ao gerar PDF: ' + err.message, true);
+      console.error(err);
     }
-    overlay.classList.remove('show');
-  }, 300);
+  }, 100);
 }
 
-// ═══════════════════════════════════════
-//  EXPORT PPTX — COMPLETO REESTRUTURADO
-// ═══════════════════════════════════════
 function exportPPTX() {
   const overlay = document.getElementById('exportOverlay');
   document.getElementById('exportMsg').textContent = 'Gerando apresentacao PPTX...';
@@ -3974,12 +4556,10 @@ function exportPPTX() {
       const pLabelP = pluralizar(pLabel);
       const temDespesas = M.geral.hasDespesas;
 
-      // Paleta hex
       const BG = '0A0D14', SURF = '0F1320', SURF2 = '151A2A', SURF3 = '1E2640';
       const ACCENT = '4F9CF9', GREEN = '34D399', RED = 'F87171', YELLOW = 'FBBF24', ORANGE = 'FB923C';
       const MUTED = '64748B', MUTED2 = '94A3B8', TEXT = 'E2E8F0', WHITE = 'FFFFFF';
 
-      // Limpa string
       const se = s => {
         if (!s) return '';
         return String(s)
@@ -3990,18 +4570,13 @@ function exportPPTX() {
           .trim();
       };
 
-      // Cor de conversao
       const convHex = t => t >= (_benchmarks.conversaoIdeal || 75) ? GREEN : t >= (_benchmarks.conversaoCritica || 60) ? YELLOW : RED;
 
-      // ── FACTORY DE SLIDE ──
       const makeSlide = (title, sub) => {
         const s = pptx.addSlide();
         s.background = { color: BG };
-        // Barra topo
         s.addShape(pptx.ShapeType.rect, { x: 0, y: 0, w: '100%', h: .08, fill: { color: ACCENT } });
-        // Barra rodape
         s.addShape(pptx.ShapeType.rect, { x: 0, y: 5.42, w: '100%', h: .08, fill: { color: SURF2 } });
-        // Rodape texto
         s.addText(se(nomeEmpresa) + ' | ' + se(M.periodo), {
           x: .2, y: 5.45, w: 5, h: .12, fontSize: 7, color: MUTED, fontFace: 'Calibri'
         });
@@ -4021,24 +4596,12 @@ function exportPPTX() {
         return s;
       };
 
-      // ── CARD KPI ──
       const addKpiCard = (s, x, y, w, h, label, value, sub, hexColor) => {
         s.addShape(pptx.ShapeType.roundRect, { x, y, w, h, fill: { color: SURF }, line: { color: hexColor, pt: 1 }, rectRadius: .05 });
         s.addShape(pptx.ShapeType.rect, { x, y, w, h: .06, fill: { color: hexColor } });
         s.addText(se(label), { x, y: y + .1, w, h: .22, fontSize: 9, bold: true, color: MUTED, fontFace: 'Calibri', align: 'center' });
         s.addText(se(value), { x, y: y + .35, w, h: .55, fontSize: 22, bold: true, color: hexColor, fontFace: 'Calibri', align: 'center' });
         if (sub) s.addText(se(sub), { x, y: y + .9, w, h: .2, fontSize: 8, color: MUTED2, fontFace: 'Calibri', align: 'center' });
-      };
-
-      // ── BARRA SIMPLES ──
-      const addBar = (s, x, y, w, h, pct, hexColor, label, valueLabel) => {
-        if (label) s.addText(se(label), { x, y: y - .02, w: 2.2, h: h + .04, fontSize: 9, color: MUTED2, fontFace: 'Calibri', valign: 'middle' });
-        const bx = label ? x + 2.3 : x;
-        const bw = label ? w - 2.3 : w;
-        s.addShape(pptx.ShapeType.roundRect, { x: bx, y, w: bw, h, fill: { color: SURF2 }, rectRadius: .02 });
-        const fill = Math.min(Math.max(pct / 100, 0.01), 1) * bw;
-        s.addShape(pptx.ShapeType.roundRect, { x: bx, y, w: fill, h, fill: { color: hexColor }, rectRadius: .02 });
-        if (valueLabel) s.addText(se(valueLabel), { x: bx + bw + .06, y: y - .02, w: 1.5, h: h + .04, fontSize: 9, bold: true, color: hexColor, fontFace: 'Calibri', valign: 'middle' });
       };
 
       // ════════════════════
@@ -4050,81 +4613,146 @@ function exportPPTX() {
         s.addShape(pptx.ShapeType.rect, { x: 0, y: 0, w: '100%', h: .08, fill: { color: ACCENT } });
         s.addShape(pptx.ShapeType.rect, { x: 0, y: 5.42, w: '100%', h: .08, fill: { color: SURF2 } });
 
-        // Bloco central
-        s.addShape(pptx.ShapeType.roundRect, { x: 1.2, y: .7, w: 7.6, h: 4.4, fill: { color: SURF }, line: { color: ACCENT, pt: 1 }, rectRadius: .1 });
-        s.addShape(pptx.ShapeType.rect, { x: 1.2, y: .7, w: 7.6, h: .08, fill: { color: ACCENT } });
+        // Bloco central SEM borda azul
+        s.addShape(pptx.ShapeType.roundRect, {
+          x: 1.2, y: .7, w: 7.6, h: 4.4,
+          fill: { color: SURF },
+          line: { color: SURF, pt: 0, transparency: 100 },
+          rectRadius: .1
+        });
 
-        s.addText(se(nomeEmpresa), { x: 1.4, y: 1.1, w: 7.2, h: .5, fontSize: 14, color: ACCENT, bold: true, fontFace: 'Calibri', align: 'center' });
-        s.addText('Dashboard Comercial', { x: 1.4, y: 1.65, w: 7.2, h: .7, fontSize: 32, bold: true, color: TEXT, fontFace: 'Calibri', align: 'center' });
-        s.addText(se(M.periodo), { x: 1.4, y: 2.4, w: 7.2, h: .45, fontSize: 22, bold: true, color: ACCENT, fontFace: 'Calibri', align: 'center' });
-        s.addText('Relatorio de Performance Comercial', { x: 1.4, y: 2.9, w: 7.2, h: .28, fontSize: 12, color: MUTED2, italic: true, fontFace: 'Calibri', align: 'center' });
+        // Nome da empresa maior
+        s.addText(se(nomeEmpresa), {
+          x: 1.4, y: 1.0, w: 7.2, h: .6,
+          fontSize: 22, color: ACCENT, bold: true, fontFace: 'Calibri', align: 'center'
+        });
+        s.addText('Dashboard Comercial', {
+          x: 1.4, y: 1.65, w: 7.2, h: .7,
+          fontSize: 32, bold: true, color: TEXT, fontFace: 'Calibri', align: 'center'
+        });
+        s.addText(se(M.periodo), {
+          x: 1.4, y: 2.4, w: 7.2, h: .45,
+          fontSize: 22, bold: true, color: ACCENT, fontFace: 'Calibri', align: 'center'
+        });
+        s.addText('Relatorio de Performance Comercial', {
+          x: 1.4, y: 2.9, w: 7.2, h: .28,
+          fontSize: 12, color: MUTED2, italic: true, fontFace: 'Calibri', align: 'center'
+        });
 
         // Score
         const sc = M.score >= 80 ? GREEN : M.score >= 65 ? YELLOW : RED;
-        s.addShape(pptx.ShapeType.roundRect, { x: 3.9, y: 3.35, w: 2.2, h: 1.0, fill: { color: SURF2 }, line: { color: sc, pt: 2 }, rectRadius: .06 });
+        s.addShape(pptx.ShapeType.roundRect, {
+          x: 3.9, y: 3.35, w: 2.2, h: 1.0,
+          fill: { color: SURF2 },
+          line: { color: sc, pt: 2 },
+          rectRadius: .06
+        });
         s.addText('Score de Saude', { x: 3.9, y: 3.42, w: 2.2, h: .22, fontSize: 9, color: MUTED, fontFace: 'Calibri', align: 'center' });
         s.addText(M.score + '/100', { x: 3.9, y: 3.65, w: 2.2, h: .4, fontSize: 20, bold: true, color: sc, fontFace: 'Calibri', align: 'center' });
         const sl = M.score >= 80 ? 'Saudavel' : M.score >= 65 ? 'Atencao' : M.score >= 50 ? 'Regular' : 'Critico';
         s.addText(sl, { x: 3.9, y: 4.07, w: 2.2, h: .2, fontSize: 10, bold: true, color: sc, fontFace: 'Calibri', align: 'center' });
 
-        s.addText('Gerado em ' + new Date().toLocaleDateString('pt-BR'), { x: 1.4, y: 4.95, w: 7.2, h: .22, fontSize: 9, color: MUTED, fontFace: 'Calibri', align: 'center' });
+        s.addText('Gerado em ' + new Date().toLocaleDateString('pt-BR'), {
+          x: 1.4, y: 4.95, w: 7.2, h: .22,
+          fontSize: 9, color: MUTED, fontFace: 'Calibri', align: 'center'
+        });
       }
 
       // ════════════════════
-      //  SLIDE 2 — METAS
+      //  SLIDE 2 — DIAGNÓSTICO EXECUTIVO
       // ════════════════════
       {
-        const s = makeSlide('Metas — ' + se(M.periodo), 'Acompanhamento de objetivos do periodo');
+        const s = makeSlide('Diagnostico Executivo', 'Resumo do periodo e principais pontos de atencao');
+
+        const topDent = [...M.dentistas].sort((a, b) => b.valor_aprovado - a.valor_aprovado)[0];
+        const piorDent = [...M.dentistas].filter(d => d.total >= 5).sort((a, b) => a.taxa - b.taxa)[0];
+        const totalVencVal = M.topVencidos.reduce((s2, v) => s2 + v.total, 0);
+
+        // Linha de resumo
         const goalAtivo = getGoalForActivePeriod();
-        const goalPct = goalAtivo > 0 ? Math.min(+(g.aprovado / goalAtivo * 100).toFixed(1), 999) : null;
+        const goalPct = goalAtivo > 0 ? +(g.aprovado / goalAtivo * 100).toFixed(1) : null;
 
-        if (goalAtivo > 0 && goalPct !== null) {
-          const gc = goalPct >= 100 ? GREEN : goalPct >= 75 ? YELLOW : RED;
-          // Card principal
-          s.addShape(pptx.ShapeType.roundRect, { x: .3, y: .9, w: 9.4, h: 1.5, fill: { color: SURF }, line: { color: gc, pt: 1.5 }, rectRadius: .05 });
-          s.addShape(pptx.ShapeType.rect, { x: .3, y: .9, w: 9.4, h: .06, fill: { color: gc } });
-          s.addText('Meta Global do Periodo', { x: .5, y: .98, w: 5, h: .28, fontSize: 10, bold: true, color: MUTED, fontFace: 'Calibri' });
-          s.addText(se(fmtK(goalAtivo)), { x: .5, y: 1.28, w: 3, h: .45, fontSize: 20, bold: true, color: TEXT, fontFace: 'Calibri' });
-          s.addText('Realizado: ' + se(fmtK(g.aprovado)), { x: 3.8, y: 1.28, w: 3.2, h: .45, fontSize: 16, bold: true, color: gc, fontFace: 'Calibri' });
-          s.addText(goalPct + '% atingido', { x: 7.2, y: 1.28, w: 2.3, h: .45, fontSize: 18, bold: true, color: gc, fontFace: 'Calibri', align: 'right' });
-          // Barra progresso
-          s.addShape(pptx.ShapeType.roundRect, { x: .5, y: 1.82, w: 8.8, h: .2, fill: { color: SURF2 }, rectRadius: .04 });
-          s.addShape(pptx.ShapeType.roundRect, { x: .5, y: 1.82, w: Math.min(goalPct / 100, 1) * 8.8, h: .2, fill: { color: gc }, rectRadius: .04 });
-          const gapVal = goalAtivo - g.aprovado;
-          s.addText(gapVal > 0 ? 'Faltam ' + se(fmtK(gapVal)) + ' para atingir a meta.' : 'Meta superada em ' + se(fmtK(Math.abs(gapVal))) + '!', {
-            x: .5, y: 2.08, w: 8.8, h: .24, fontSize: 10, color: gapVal > 0 ? MUTED : GREEN, italic: gapVal > 0, fontFace: 'Calibri'
-          });
+        // Linha de resumo
+        const resumoTxt = 'Receita aprovada: ' + se(fmtK(g.aprovado)) +
+          '   |   Taxa de conversao: ' + g.taxa + '%' +
+          '   |   Score de saude: ' + M.score + '/100';
+        s.addText(resumoTxt, {
+          x: .3, y: .88, w: 9.4, h: .38,
+          fontSize: 13, bold: true, color: TEXT, fontFace: 'Calibri'
+        });
 
-          // Metas mensais
-          const metasMeses = Object.entries(_metasMensais)
-            .filter(([k]) => !k.startsWith('year-'))
-            .slice(0, 6);
+        // Linha separadora
+        s.addShape(pptx.ShapeType.rect, {
+          x: .3, y: 1.3, w: 9.4, h: .02,
+          fill: { color: SURF2 }
+        });
 
-          if (metasMeses.length > 0) {
-            s.addText('Metas por Mes', { x: .3, y: 2.45, w: 9.4, h: .28, fontSize: 11, bold: true, color: ACCENT, fontFace: 'Calibri' });
-            metasMeses.forEach(([key, meta], i) => {
-              const mes = MONTHS.find(m => m.key === key);
-              if (!mes) return;
-              const real = mes.geral.aprovado;
-              const pctM = meta > 0 ? Math.min(+(real / meta * 100).toFixed(1), 999) : 0;
-              const cor = pctM >= 100 ? GREEN : pctM >= 75 ? YELLOW : RED;
-              const col = i % 3, row = Math.floor(i / 3);
-              const x = .3 + col * 3.27, y = 2.8 + row * 1.35;
-              s.addShape(pptx.ShapeType.roundRect, { x, y, w: 3.1, h: 1.2, fill: { color: SURF }, line: { color: cor, pt: 1 }, rectRadius: .05 });
-              s.addText(se(mes.periodo), { x, y: y + .08, w: 3.1, h: .24, fontSize: 9, color: MUTED, fontFace: 'Calibri', align: 'center' });
-              s.addText(pctM + '%', { x, y: y + .34, w: 3.1, h: .45, fontSize: 24, bold: true, color: cor, fontFace: 'Calibri', align: 'center' });
-              // Mini barra
-              s.addShape(pptx.ShapeType.roundRect, { x: x + .2, y: y + .84, w: 2.7, h: .12, fill: { color: SURF2 }, rectRadius: .03 });
-              s.addShape(pptx.ShapeType.roundRect, { x: x + .2, y: y + .84, w: Math.min(pctM / 100, 1) * 2.7, h: .12, fill: { color: cor }, rectRadius: .03 });
-              s.addText(se(fmtK(real)) + ' / ' + se(fmtK(meta)), { x, y: y + 1.0, w: 3.1, h: .18, fontSize: 8, color: TEXT, fontFace: 'Calibri', align: 'center' });
-            });
-          }
-        } else {
-          s.addShape(pptx.ShapeType.roundRect, { x: .3, y: .9, w: 9.4, h: .8, fill: { color: SURF }, line: { color: MUTED, pt: 1 }, rectRadius: .05 });
-          s.addText('Nenhuma meta definida para este periodo. Configure metas no botao "Metas" no dashboard.', {
-            x: .5, y: 1.0, w: 9, h: .6, fontSize: 12, color: MUTED, italic: true, fontFace: 'Calibri', wrap: true
+        // Bullets dinâmicos
+        const bullets = [];
+
+        if (topDent) {
+          bullets.push({
+            icon: '\u2B50',
+            txt: 'Melhor ' + se(vLabel) + ': ' + se(topDent.nome) + ' — ' + se(fmtK(topDent.valor_aprovado)) + ' faturados',
+            color: YELLOW
           });
         }
+
+        if (piorDent && piorDent.taxa < (_benchmarks.conversaoCritica || 60)) {
+          bullets.push({
+            icon: '\u26A0',
+            txt: 'Atencao: ' + se(piorDent.nome) + ' com apenas ' + piorDent.taxa + '% de conversao',
+            color: YELLOW
+          });
+        } else if (piorDent) {
+          bullets.push({
+            icon: '\u26A0',
+            txt: se(vLabel) + ' com menor conversao: ' + se(piorDent.nome) + ' (' + piorDent.taxa + '%)',
+            color: MUTED2
+          });
+        }
+
+        if (totalVencVal > 0) {
+          bullets.push({
+            icon: '\uD83D\uDCB8',
+            txt: se(fmtK(totalVencVal)) + ' em orcamentos vencidos — potencial de +' + se(fmtK(totalVencVal * .3)) + ' via follow-up',
+            color: GREEN
+          });
+        }
+
+        if (g.cancelados > 0) {
+          bullets.push({
+            icon: '\uD83D\uDD34',
+            txt: g.cancelados + ' ' + se(pLabel.toLowerCase()) + (g.cancelados > 1 ? 's' : '') + ' cancelado' + (g.cancelados > 1 ? 's' : '') + ' no periodo',
+            color: RED
+          });
+        }
+
+        if (goalAtivo > 0 && goalPct !== null) {
+          const metaBatida = goalPct >= 100;
+          const corMeta = metaBatida ? GREEN : goalPct >= 75 ? YELLOW : RED;
+          const iconeMeta = metaBatida ? '\u2705' : '\uD83C\uDFAF';
+          const txMeta = metaBatida
+            ? 'Meta batida! ' + goalPct + '% atingido (' + se(fmtK(g.aprovado)) + ' de ' + se(fmtK(goalAtivo)) + ')'
+            : 'Meta: ' + goalPct + '% atingido — faltam ' + se(fmtK(goalAtivo - g.aprovado)) + ' para bater a meta';
+          bullets.push({ icon: iconeMeta, txt: txMeta, color: corMeta });
+        }
+
+        if (g.taxa >= (_benchmarks.conversaoIdeal || 75)) {
+          bullets.push({
+            icon: '\u2705',
+            txt: 'Taxa de conversao acima da meta (' + (_benchmarks.conversaoIdeal || 75) + '%) — desempenho excelente',
+            color: GREEN
+          });
+        }
+
+        bullets.slice(0, 5).forEach((b, i) => {
+          const y = 1.42 + i * .62;
+          s.addText(b.icon + '  ' + b.txt, {
+            x: .3, y, w: 9.4, h: .52,
+            fontSize: 13, color: b.color, fontFace: 'Calibri', bold: false
+          });
+        });
       }
 
       // ════════════════════
@@ -4150,13 +4778,12 @@ function exportPPTX() {
       }
 
       // ════════════════════
-      //  SLIDE 4 — GRAFICO PERFORMANCE VENDEDORES
+      //  SLIDE 4 — GRÁFICO PERFORMANCE VENDEDORES
       // ════════════════════
       {
         const s = makeSlide('Performance por ' + se(vLabelP), 'Faturamento e conversao por ' + se(vLabel).toLowerCase());
         const dentSorted = [...M.dentistas].sort((a, b) => b.valor_aprovado - a.valor_aprovado).slice(0, 8);
 
-        // Dados do grafico de barras — faturamento
         const chartData = [{
           name: 'Faturamento',
           labels: dentSorted.map(d => se(d.nome)),
@@ -4187,7 +4814,6 @@ function exportPPTX() {
           });
         } catch (e) { console.warn('Chart falhou, usando barras manuais', e); }
 
-        // Tabela lateral com taxa de conversao
         s.addText('Conversao por ' + se(vLabel), { x: 6.0, y: .88, w: 3.7, h: .28, fontSize: 10, bold: true, color: ACCENT, fontFace: 'Calibri' });
         dentSorted.forEach((d, i) => {
           const y = 1.22 + i * .46;
@@ -4234,136 +4860,23 @@ function exportPPTX() {
           ...rows
         ], {
           x: .2, y: .88, w: 9.6,
-          // Colunas mais apertadas para tudo caber
           colW: [.35, 1.75, .85, .85, 1.55, 1.35, .85, .75, 1.3],
           border: { type: 'none' },
           fill: { color: SURF },
           fontFace: 'Calibri',
           fontSize: 9,
-          // Altura de linha menor para caber 9 linhas + header
           rowH: .38,
           autoPage: false,
         });
       }
 
-
-      // ── BLOCO 4: SLIDE DESPESAS — KPIs menores + layout ajustado ──
-      // Substitua APENAS o bloco "SLIDE 12 — DESPESAS"
-
-      if (temDespesas) {
-        const s = makeSlide('Analise Financeira — ' + se(M.periodo), 'Receita, despesas, lucro e margem liquida');
-
-        const fat = g.aprovado, desp = g.despesas, lucro = fat - desp;
-        const margem = g.margem !== null ? g.margem : 0;
-        const ratio = fat > 0 ? +((desp / fat) * 100).toFixed(1) : 0;
-        const marColor = margem >= (_benchmarks.margemIdeal || 20) ? GREEN : margem >= (_benchmarks.margemBaixa || 10) ? YELLOW : margem >= 0 ? ORANGE : RED;
-
-        // KPI cards menores — 4 em linha, altura reduzida para sobrar espaco
-        const kpiCards = [
-          { l: 'Receita Total', v: se(fmtK(fat)), s: 'faturamento aprovado', c: GREEN },
-          { l: 'Despesas Totais', v: se(fmtK(desp)), s: ratio + '% da receita', c: RED },
-          { l: 'Lucro Liquido', v: se(fmtK(lucro)), s: lucro >= 0 ? 'resultado positivo' : 'resultado negativo', c: lucro >= 0 ? GREEN : RED },
-          { l: 'Margem Liquida', v: margem + '%', s: margem >= 20 ? 'excelente' : margem >= 10 ? 'saudavel' : margem >= 0 ? 'baixa' : 'negativa', c: marColor },
-        ];
-        kpiCards.forEach((k, i) => {
-          const x = .25 + i * 2.42;
-          // Card menor: h=1.1 em vez de 1.3
-          s.addShape(pptx.ShapeType.roundRect, { x, y: .85, w: 2.3, h: 1.1, fill: { color: SURF }, line: { color: k.c, pt: 1 }, rectRadius: .05 });
-          s.addShape(pptx.ShapeType.rect, { x, y: .85, w: 2.3, h: .05, fill: { color: k.c } });
-          s.addText(se(k.l), { x, y: .92, w: 2.3, h: .2, fontSize: 8, bold: true, color: MUTED, fontFace: 'Calibri', align: 'center' });
-          // Valor menor para nao transbordar
-          s.addText(se(k.v), { x, y: 1.14, w: 2.3, h: .42, fontSize: 17, bold: true, color: k.c, fontFace: 'Calibri', align: 'center' });
-          s.addText(se(k.s), { x, y: 1.58, w: 2.3, h: .18, fontSize: 7.5, color: MUTED2, fontFace: 'Calibri', align: 'center' });
-        });
-
-        // Grafico de barras — mais compacto, sobe para y=2.05
-        const mesesComDesp = MONTHS.filter(m => m.geral.hasDespesas || parsedExpenses[m.key]).slice(-6);
-        if (mesesComDesp.length > 0) {
-          const barData = [
-            { name: 'Receita', labels: mesesComDesp.map(m => se(m.periodo)), values: mesesComDesp.map(m => +m.geral.aprovado.toFixed(0)) },
-            { name: 'Despesas', labels: mesesComDesp.map(m => se(m.periodo)), values: mesesComDesp.map(m => +m.geral.despesas.toFixed(0)) },
-            { name: 'Lucro', labels: mesesComDesp.map(m => se(m.periodo)), values: mesesComDesp.map(m => +(m.geral.aprovado - m.geral.despesas).toFixed(0)) },
-          ];
-          try {
-            s.addChart(pptx.ChartType.bar, barData, {
-              x: .25, y: 2.05, w: 5.7, h: 3.15,  // altura aumentada levemente
-              barDir: 'col',
-              barGrouping: 'clustered',
-              chartColors: [GREEN, RED, ACCENT],
-              showValue: false,
-              catAxisLabelColor: MUTED2,
-              catAxisLabelFontSize: 8,
-              valAxisLabelColor: MUTED,
-              valAxisLabelFontSize: 7,
-              valAxisLineShow: false,
-              plotAreaBkgndColor: SURF,
-              chartAreaBkgndColor: BG,
-              legendPos: 'b',
-              legendColor: MUTED2,
-              legendFontSize: 8,
-              showLegend: true,
-              border: { pt: 0 },
-              valGridLine: { color: SURF2, pt: .5 },
-              valAxisFormatCode: '"R$"#,##0',
-            });
-          } catch (e) { console.warn('Bar chart despesas falhou', e); }
-        }
-
-        // Tabela resumo — reposicionada para lado direito, mais compacta
-        s.addText('Resumo Mensal', { x: 6.15, y: 2.05, w: 3.6, h: .26, fontSize: 9.5, bold: true, color: ACCENT, fontFace: 'Calibri' });
-        const mesesTabela = mesesComDesp.slice(-5);
-        s.addTable([
-          [
-            { text: 'Mes', options: { bold: true, color: ACCENT, fill: { color: SURF2 }, fontFace: 'Calibri', fontSize: 9 } },
-            { text: 'Lucro', options: { bold: true, color: ACCENT, fill: { color: SURF2 }, fontFace: 'Calibri', fontSize: 9 } },
-            { text: 'Margem', options: { bold: true, color: ACCENT, fill: { color: SURF2 }, fontFace: 'Calibri', align: 'center', fontSize: 9 } },
-          ],
-          ...mesesTabela.map(m => {
-            const ml = m.geral.aprovado - m.geral.despesas;
-            const mm = m.geral.aprovado > 0 ? +((ml / m.geral.aprovado) * 100).toFixed(1) : 0;
-            const mc = mm >= 20 ? GREEN : mm >= 10 ? YELLOW : mm >= 0 ? ORANGE : RED;
-            return [
-              { text: se(m.periodo), options: { color: TEXT, fontFace: 'Calibri', fontSize: 9 } },
-              { text: se(fmtK(ml)), options: { color: ml >= 0 ? GREEN : RED, bold: true, fontFace: 'Calibri', fontSize: 9 } },
-              { text: mm + '%', options: { color: mc, bold: true, fontFace: 'Calibri', align: 'center', fontSize: 9 } },
-            ];
-          })
-        ], {
-          x: 6.15, y: 2.36, w: 3.6,
-          colW: [1.7, 1.2, .7],
-          border: { type: 'none' },
-          fill: { color: SURF },
-          fontFace: 'Calibri',
-          fontSize: 9,
-          rowH: .39,  // linha menor para caber mais meses
-          autoPage: false,
-        });
-
-        // Insight financeiro — reposicionado para baixo do resumo, bem compacto
-        const insFinanceiros = generateFinancialInsights(mesesComDesp.length > 0 ? mesesComDesp : [M]);
-        if (insFinanceiros.length > 0) {
-          const ins = insFinanceiros[0];
-          const cor = ins.t === 'a' ? RED : ins.t === 'w' ? YELLOW : ins.t === 'g' ? GREEN : ACCENT;
-          // Calcula posicao Y dinamica baseada na tabela
-          const tabelaBottom = 2.36 + (mesesTabela.length + 1) * .39 + .1;
-          const insY = Math.max(tabelaBottom, 4.45);
-          if (insY < 5.25) {
-            s.addShape(pptx.ShapeType.roundRect, { x: 6.15, y: insY, w: 3.6, h: .82, fill: { color: SURF }, line: { color: cor, pt: 1 }, rectRadius: .04 });
-            s.addShape(pptx.ShapeType.rect, { x: 6.15, y: insY, w: .06, h: .82, fill: { color: cor } });
-            s.addText(se(ins.l), { x: 6.25, y: insY + .1, w: 3.4, h: .24, fontSize: 9, bold: true, color: cor, fontFace: 'Calibri' });
-            s.addText(se(ins.txt).substring(0, 90), { x: 6.25, y: insY + .36, w: 3.4, h: .38, fontSize: 8, color: TEXT, fontFace: 'Calibri', wrap: true });
-          }
-        }
-      }
-
       // ════════════════════
-      //  SLIDE 6 — GRAFICO CANAIS
+      //  SLIDE 6 — CANAIS
       // ════════════════════
       {
         const s = makeSlide('Canais de Marketing', 'Taxa de conversao e receita por canal');
         const canaisSorted = [...M.canais].sort((a, b) => b.valor - a.valor).slice(0, 7);
 
-        // Grafico de pizza — receita por canal
         const pieData = [{
           name: 'Receita',
           labels: canaisSorted.map(c => se(canalDisplay(c.canal))),
@@ -4389,7 +4902,6 @@ function exportPPTX() {
           });
         } catch (e) { console.warn('Pie chart falhou', e); }
 
-        // Barras de conversao lado direito
         s.addText('Conversao por Canal', { x: 5.1, y: .88, w: 4.7, h: .28, fontSize: 11, bold: true, color: ACCENT, fontFace: 'Calibri' });
         canaisSorted.forEach((c, i) => {
           const y = 1.22 + i * .54;
@@ -4397,18 +4909,67 @@ function exportPPTX() {
           const cor = convHex(c.taxa);
           const nom = se(canalDisplay(c.canal));
           s.addText(nom.substring(0, 14), { x: 5.1, y: y + .04, w: 1.8, h: .3, fontSize: 9, color: MUTED2, fontFace: 'Calibri' });
-          // Barra
           const bx = 6.95, bw = 1.9;
           s.addShape(pptx.ShapeType.roundRect, { x: bx, y: y + .06, w: bw, h: .24, fill: { color: SURF2 }, rectRadius: .03 });
           s.addShape(pptx.ShapeType.roundRect, { x: bx, y: y + .06, w: Math.max(c.taxa / 100 * bw, .02), h: .24, fill: { color: cor }, rectRadius: .03 });
           s.addText(c.taxa + '%', { x: 8.92, y: y + .04, w: .9, h: .3, fontSize: 10, bold: true, color: cor, fontFace: 'Calibri', align: 'right' });
-          // Receita
           s.addText(se(fmtK(c.valor)), { x: 5.1, y: y + .3, w: 4.7, h: .18, fontSize: 8, color: MUTED, fontFace: 'Calibri' });
         });
       }
 
       // ════════════════════
-      //  SLIDE 7 — COMPARATIVO MES ANTERIOR
+      //  SLIDE 7 — EVOLUÇÃO MENSAL
+      // ════════════════════
+      if (MONTHS.length >= 2) {
+        const s = makeSlide('Evolucao Mensal', 'Comparativo de receita e conversao ao longo dos meses');
+        const allMonths = MONTHS.slice(-12);
+
+        const chartData = [{
+          name: 'Receita',
+          labels: allMonths.map(m => se(m.periodo)),
+          values: allMonths.map(m => +m.geral.aprovado.toFixed(0)),
+        }];
+
+        try {
+          s.addChart(pptx.ChartType.bar, chartData, {
+            x: .25, y: .88, w: 9.5, h: 3.8,
+            barDir: 'col',
+            barGrouping: 'clustered',
+            chartColors: [ACCENT],
+            showValue: true,
+            dataLabelFontSize: 9,
+            dataLabelColor: TEXT,
+            dataLabelFormatCode: '"R$"#,##0',
+            catAxisLabelColor: MUTED2,
+            catAxisLabelFontSize: 8,
+            valAxisLabelColor: MUTED,
+            valAxisLabelFontSize: 8,
+            valAxisLineShow: false,
+            plotAreaBkgndColor: SURF,
+            chartAreaBkgndColor: BG,
+            legendPos: 'n',
+            showLegend: false,
+            border: { pt: 0 },
+            valAxisFormatCode: '"R$"#,##0',
+            valGridLine: { color: SURF2, pt: .5 },
+          });
+        } catch (e) { console.warn('Bar chart evolucao falhou', e); }
+
+        // Taxa de conversão embaixo de cada barra
+        const colW = 9.5 / allMonths.length;
+        allMonths.forEach((m, i) => {
+          const x = .25 + i * colW;
+          const cor = convHex(m.geral.taxa);
+          s.addText(m.geral.taxa + '% conv.', {
+            x, y: 4.74, w: colW, h: .28,
+            fontSize: 8, bold: true, color: cor,
+            fontFace: 'Calibri', align: 'center'
+          });
+        });
+      }
+
+      // ════════════════════
+      //  SLIDE 8 — COMPARATIVO MÊS ANTERIOR
       // ════════════════════
       if (prev_) {
         const s = makeSlide('Comparativo — ' + se(M.periodo) + ' vs ' + se(prev_.periodo), 'Evolucao periodo a periodo');
@@ -4438,83 +4999,147 @@ function exportPPTX() {
         });
       }
 
+           // ════════════════════
+      //  SLIDE 9A — FINANCEIRO KPIs + GRÁFICO
       // ════════════════════
-      //  SLIDE 8 — PROJECAO
-      // ════════════════════
-      if (MONTHS.length >= 2) {
-        const s = makeSlide('Projecao para o Proximo Periodo', 'Estimativa baseada na tendencia dos ultimos meses');
-        const ultMeses = MONTHS.slice(-3);
-        const mediaRec = ultMeses.reduce((s2, m) => s2 + m.geral.aprovado, 0) / ultMeses.length;
-        const tendRec = ultMeses.length >= 2 ? ultMeses[ultMeses.length - 1].geral.aprovado - ultMeses[0].geral.aprovado : 0;
-        const projecaoRec = Math.max(mediaRec + (tendRec / (ultMeses.length - 1 || 1)), 0);
-        const mediaConv = +(ultMeses.reduce((s2, m) => s2 + m.geral.taxa, 0) / ultMeses.length).toFixed(1);
-        const varPct = g.aprovado > 0 ? +((projecaoRec - g.aprovado) / g.aprovado * 100).toFixed(1) : 0;
-        const corProj = projecaoRec >= g.aprovado ? GREEN : RED;
+      if (temDespesas) {
+        // Base de cálculo — todos os meses com despesa
+        const mesesFin = MONTHS.filter(m => m.geral.hasDespesas || parsedExpenses[m.key]);
+        const fatFin   = mesesFin.reduce((a, m) => a + m.geral.aprovado, 0) || g.aprovado;
+        const despFin  = mesesFin.reduce((a, m) => a + m.geral.despesas, 0) || g.despesas;
+        const lucroFin = fatFin - despFin;
+        const margemFin = fatFin > 0 ? +((lucroFin / fatFin) * 100).toFixed(1) : 0;
+        const ratioFin  = fatFin > 0 ? +((despFin / fatFin) * 100).toFixed(1) : 0;
+        const marColor  = margemFin >= (_benchmarks.margemIdeal || 20) ? GREEN
+                        : margemFin >= (_benchmarks.margemBaixa || 10) ? YELLOW
+                        : margemFin >= 0 ? ORANGE : RED;
 
-        // Card principal
-        s.addShape(pptx.ShapeType.roundRect, { x: .3, y: .9, w: 9.4, h: 1.55, fill: { color: SURF }, line: { color: corProj, pt: 2 }, rectRadius: .06 });
-        s.addShape(pptx.ShapeType.rect, { x: .3, y: .9, w: 9.4, h: .07, fill: { color: corProj } });
-        s.addText('Receita Projetada', { x: .5, y: .98, w: 4, h: .3, fontSize: 10, bold: true, color: MUTED, fontFace: 'Calibri' });
-        s.addText(se(fmtK(projecaoRec)), { x: .5, y: 1.28, w: 5, h: .7, fontSize: 30, bold: true, color: corProj, fontFace: 'Calibri' });
-        s.addText((varPct >= 0 ? '+ ' : '- ') + Math.abs(varPct) + '% vs ' + se(M.periodo), { x: 5.6, y: 1.35, w: 3.9, h: .4, fontSize: 14, bold: true, color: corProj, fontFace: 'Calibri', align: 'right' });
-        s.addText('Conversao projetada: ' + mediaConv + '%   |   Base: media dos ultimos ' + ultMeses.length + ' meses', { x: .5, y: 1.9, w: 8.8, h: .3, fontSize: 10, color: TEXT, fontFace: 'Calibri' });
-        s.addText('* Projecao linear simples. Nao considera sazonalidade ou fatores externos.', { x: .5, y: 2.28, w: 8.8, h: .22, fontSize: 8, color: MUTED, italic: true, fontFace: 'Calibri' });
+        // Formata número abreviado para labels do gráfico
+        const fmtGraf = v => {
+          const n = Math.round(v);
+          if (Math.abs(n) >= 10000) return (Math.round(n / 1000)) + 'k';
+          return String(n);
+        };
 
-        // Grafico de linha — evolucao historica
-        const allMonths = MONTHS.slice(-6);
-        const lineData = [
-          { name: 'Receita', labels: allMonths.map(m => se(m.periodo)), values: allMonths.map(m => +m.geral.aprovado.toFixed(0)) },
-          { name: 'Conversao %', labels: allMonths.map(m => se(m.periodo)), values: allMonths.map(m => m.geral.taxa) },
-        ];
-        try {
-          s.addChart(pptx.ChartType.line, lineData, {
-            x: .3, y: 2.6, w: 5.5, h: 2.65,
-            chartColors: [GREEN, ACCENT],
-            lineDataSymbol: 'circle',
-            lineDataSymbolSize: 6,
-            showValue: false,
-            catAxisLabelColor: MUTED2,
-            catAxisLabelFontSize: 9,
-            valAxisLabelColor: MUTED,
-            valAxisLabelFontSize: 8,
-            plotAreaBkgndColor: SURF,
-            chartAreaBkgndColor: BG,
-            legendPos: 'b',
-            legendColor: MUTED2,
-            legendFontSize: 9,
-            showLegend: true,
-            border: { pt: 0 },
-            valGridLine: { color: SURF2, pt: .5 },
+        // ── SLIDE 9A ──
+        {
+          const s = makeSlide('Analise Financeira — ' + se(M.periodo), 'Receita, despesas, lucro e margem liquida');
+
+          // 4 KPI cards
+          const kpiCards = [
+            { l: 'Receita Total',   v: se(fmtK(fatFin)),   s: 'faturamento aprovado',                                                        c: GREEN  },
+            { l: 'Despesas Totais', v: se(fmtK(despFin)),  s: ratioFin + '% da receita',                                                     c: RED    },
+            { l: 'Lucro Liquido',   v: se(fmtK(lucroFin)), s: lucroFin >= 0 ? 'resultado positivo' : 'resultado negativo',                   c: lucroFin >= 0 ? GREEN : RED },
+            { l: 'Margem Liquida',  v: margemFin + '%',    s: margemFin >= 20 ? 'excelente' : margemFin >= 10 ? 'saudavel' : margemFin >= 0 ? 'baixa' : 'negativa', c: marColor },
+          ];
+          kpiCards.forEach((k, i) => {
+            const x = .25 + i * 2.42;
+            s.addShape(pptx.ShapeType.roundRect, { x, y: .85, w: 2.3, h: 1.1, fill: { color: SURF }, line: { color: k.c, pt: 1 }, rectRadius: .05 });
+            s.addShape(pptx.ShapeType.rect,      { x, y: .85, w: 2.3, h: .05, fill: { color: k.c } });
+            s.addText(se(k.l), { x, y: .92,  w: 2.3, h: .2,  fontSize: 8,   bold: true, color: MUTED,  fontFace: 'Calibri', align: 'center' });
+            s.addText(se(k.v), { x, y: 1.14, w: 2.3, h: .42, fontSize: 17,  bold: true, color: k.c,    fontFace: 'Calibri', align: 'center' });
+            s.addText(se(k.s), { x, y: 1.58, w: 2.3, h: .18, fontSize: 7.5,             color: MUTED2, fontFace: 'Calibri', align: 'center' });
           });
-        } catch (e) { console.warn('Line chart falhou', e); }
 
-        // Tabela base
-        s.addText('Base da Projecao', { x: 6.05, y: 2.6, w: 3.7, h: .28, fontSize: 10, bold: true, color: ACCENT, fontFace: 'Calibri' });
-        s.addTable([
-          [
-            { text: 'Periodo', options: { bold: true, color: ACCENT, fill: { color: SURF2 }, fontFace: 'Calibri' } },
-            { text: 'Receita', options: { bold: true, color: ACCENT, fill: { color: SURF2 }, fontFace: 'Calibri' } },
-            { text: 'Conv.', options: { bold: true, color: ACCENT, fill: { color: SURF2 }, fontFace: 'Calibri', align: 'center' } },
-          ],
-          ...ultMeses.map(m => [
-            { text: se(m.periodo), options: { color: TEXT, fontFace: 'Calibri' } },
-            { text: se(fmtK(m.geral.aprovado)), options: { color: GREEN, bold: true, fontFace: 'Calibri' } },
-            { text: m.geral.taxa + '%', options: { color: convHex(m.geral.taxa), bold: true, fontFace: 'Calibri', align: 'center' } },
-          ])
-        ], {
-          x: 6.05, y: 2.95, w: 3.7,
-          colW: [1.8, 1.2, .7],
-          border: { type: 'none' },
-          fill: { color: SURF },
-          fontFace: 'Calibri',
-          fontSize: 10,
-          rowH: .43,
-          autoPage: false,
-        });
+          // Gráfico expandido com labels abreviadas
+          if (mesesFin.length > 0) {
+            // Monta labels customizadas para exibir sobre as barras
+            const labelsGraf = mesesFin.map(m => se(m.periodo));
+            const recValues  = mesesFin.map(m => +m.geral.aprovado.toFixed(0));
+            const despValues = mesesFin.map(m => +m.geral.despesas.toFixed(0));
+            const lucValues  = mesesFin.map(m => +(m.geral.aprovado - m.geral.despesas).toFixed(0));
+
+            const barData = [
+              { name: 'Receita',  labels: labelsGraf, values: recValues  },
+              { name: 'Despesas', labels: labelsGraf, values: despValues },
+              { name: 'Lucro',    labels: labelsGraf, values: lucValues  },
+            ];
+            try {
+              s.addChart(pptx.ChartType.bar, barData, {
+                x: .25, y: 2.05, w: 9.5, h: 3.2,
+                barDir: 'col',
+                barGrouping: 'clustered',
+                chartColors: [GREEN, RED, ACCENT],
+                showValue: true,
+                dataLabelFontSize: 7,
+                dataLabelColor: TEXT,
+                // Formato curto nativo — usa formato #,##0,, que divide por milhão;
+                // como pptxgenjs aceita dataLabelFormatCode, usamos formato personalizado
+                // que abrevia em K automaticamente via formatCode
+                dataLabelFormatCode: '[>=10000]#,##0,"k";[<=-10000]-#,##0,"k";0',
+                catAxisLabelColor: MUTED2,
+                catAxisLabelFontSize: 7,
+                valAxisLabelColor: MUTED,
+                valAxisLabelFontSize: 7,
+                valAxisLineShow: false,
+                valAxisFormatCode: '[>=10000]#,##0,"k";[<=-10000]-#,##0,"k";0',
+                plotAreaBkgndColor: SURF,
+                chartAreaBkgndColor: BG,
+                legendPos: 'b',
+                legendColor: MUTED2,
+                legendFontSize: 8,
+                showLegend: true,
+                border: { pt: 0 },
+                valGridLine: { color: SURF2, pt: .5 },
+              });
+            } catch (e) { console.warn('Bar chart financeiro falhou', e); }
+          }
+        }
+
+        // ── SLIDE 9B — RESUMO MENSAL COMPLETO ──
+        {
+          const s = makeSlide('Resumo Mensal Financeiro — ' + se(M.periodo), 'Detalhamento mes a mes: receita, despesas, lucro e margem');
+
+          // Insight financeiro — canto superior direito
+          const insFinanceiros = generateFinancialInsights(mesesFin.length > 0 ? mesesFin : [M]);
+          if (insFinanceiros.length > 0) {
+            const ins = insFinanceiros[0];
+            const cor = ins.t === 'a' ? RED : ins.t === 'w' ? YELLOW : ins.t === 'g' ? GREEN : ACCENT;
+            s.addShape(pptx.ShapeType.roundRect, { x: 6.6, y: .82, w: 3.1, h: 1.0, fill: { color: SURF }, line: { color: cor, pt: 1 }, rectRadius: .04 });
+            s.addShape(pptx.ShapeType.rect,      { x: 6.6, y: .82, w: .06, h: 1.0, fill: { color: cor } });
+            s.addText(se(ins.l),                     { x: 6.72, y: .88,  w: 2.9, h: .24, fontSize: 9,  bold: true, color: cor,  fontFace: 'Calibri' });
+            s.addText(se(ins.txt).substring(0, 100), { x: 6.72, y: 1.14, w: 2.9, h: .6,  fontSize: 8,              color: TEXT, fontFace: 'Calibri', wrap: true });
+          }
+
+          // Tabela compacta com todos os meses — fonte menor para caber tudo
+          const rowH = mesesFin.length <= 8 ? .38 : mesesFin.length <= 12 ? .32 : .27;
+          const fszTab = mesesFin.length <= 8 ? 9 : mesesFin.length <= 12 ? 8 : 7;
+
+          s.addTable([
+            [
+              { text: 'Mes',      options: { bold: true, color: ACCENT, fill: { color: SURF2 }, fontFace: 'Calibri', fontSize: fszTab } },
+              { text: 'Receita',  options: { bold: true, color: ACCENT, fill: { color: SURF2 }, fontFace: 'Calibri', fontSize: fszTab } },
+              { text: 'Despesas', options: { bold: true, color: ACCENT, fill: { color: SURF2 }, fontFace: 'Calibri', fontSize: fszTab } },
+              { text: 'Lucro',    options: { bold: true, color: ACCENT, fill: { color: SURF2 }, fontFace: 'Calibri', fontSize: fszTab } },
+              { text: 'Margem',   options: { bold: true, color: ACCENT, fill: { color: SURF2 }, fontFace: 'Calibri', align: 'center', fontSize: fszTab } },
+            ],
+            ...mesesFin.map(m => {
+              const ml = m.geral.aprovado - m.geral.despesas;
+              const mm = m.geral.aprovado > 0 ? +((ml / m.geral.aprovado) * 100).toFixed(1) : 0;
+              const mc = mm >= 20 ? GREEN : mm >= 10 ? YELLOW : mm >= 0 ? ORANGE : RED;
+              return [
+                { text: se(m.periodo),               options: { color: TEXT,                   fontFace: 'Calibri', fontSize: fszTab } },
+                { text: se(fmtK(m.geral.aprovado)),  options: { color: GREEN,    bold: true,   fontFace: 'Calibri', fontSize: fszTab } },
+                { text: se(fmtK(m.geral.despesas)),  options: { color: RED,      bold: true,   fontFace: 'Calibri', fontSize: fszTab } },
+                { text: se(fmtK(ml)),                options: { color: ml >= 0 ? GREEN : RED, bold: true, fontFace: 'Calibri', fontSize: fszTab } },
+                { text: mm + '%',                    options: { color: mc,       bold: true,   fontFace: 'Calibri', align: 'center', fontSize: fszTab } },
+              ];
+            })
+          ], {
+            x: .25, y: .88, w: 6.2,
+            colW: [1.9, 1.15, 1.15, 1.15, .85],
+            border: { type: 'none' },
+            fill: { color: SURF },
+            fontFace: 'Calibri',
+            fontSize: fszTab,
+            rowH: rowH,
+            autoPage: false,
+          });
+        }
       }
 
       // ════════════════════
-      //  SLIDE 9 — OPORTUNIDADES A RECUPERAR
+      //  SLIDE 10 — OPORTUNIDADES A RECUPERAR
       // ════════════════════
       {
         const s = makeSlide('Oportunidades a Recuperar', se(pLabelP) + ' vencidos — follow-up imediato');
@@ -4561,7 +5186,7 @@ function exportPPTX() {
       }
 
       // ════════════════════
-      //  SLIDE 10 — ALERTAS
+      //  SLIDE 11 — ALERTAS
       // ════════════════════
       {
         const insights = generateInsights(M);
@@ -4583,7 +5208,7 @@ function exportPPTX() {
       }
 
       // ════════════════════
-      //  SLIDE 11 — ACOES
+      //  SLIDE 12 — AÇÕES
       // ════════════════════
       {
         const s = makeSlide('Acoes Prioritarias', 'Priorize nessa ordem para maximizar resultado');
@@ -4614,6 +5239,8 @@ function exportPPTX() {
         .replace(/[^a-zA-Z0-9_\-]/g, '_');
       const fileName = nomeArq + '_' + periodoArq + '.pptx';
 
+      const totalSlides = 12 + (temDespesas ? 0 : -1) + (prev_ ? 0 : -1) + (MONTHS.length >= 2 ? 0 : -1);
+
       pptx.write({ outputType: 'blob' }).then(blob => {
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -4621,7 +5248,7 @@ function exportPPTX() {
         document.body.appendChild(a); a.click();
         setTimeout(() => { URL.revokeObjectURL(url); document.body.removeChild(a); }, 1000);
         overlay.classList.remove('show');
-        showToast('Apresentacao gerada com ' + (temDespesas ? '12' : '11') + ' slides!');
+        showToast('Apresentacao gerada com sucesso!');
       }).catch(e => {
         console.error(e);
         try {
@@ -4641,21 +5268,3 @@ function exportPPTX() {
     }
   }, 300);
 }
-
-// ═══════════════════════════════════════
-//  INICIALIZAÇÃO
-// ═══════════════════════════════════════
-document.addEventListener('DOMContentLoaded', () => {
-  loadConfig();
-  const dz = document.getElementById('dropZone');
-  if (dz) {
-    dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('drag'); });
-    dz.addEventListener('dragleave', () => { dz.classList.remove('drag'); });
-    dz.addEventListener('drop', e => {
-      e.preventDefault(); dz.classList.remove('drag');
-      handleFiles({ target: { files: e.dataTransfer.files } });
-    });
-  }
-  const pwd = document.getElementById('loginPwd');
-  if (pwd) pwd.addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
-});

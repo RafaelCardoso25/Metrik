@@ -17,7 +17,7 @@
     <div class="login-title">Metrik</div>
     <div class="login-sub">Dashboard Comercial · Acesso Restrito</div>
     <label class="login-label">Senha de Acesso</label>
-    <input type="password" id="loginPwd" class="login-input" placeholder="Digite sua senha">
+    <input type="password" id="loginPwd" class="login-input" placeholder="Digite sua senha" onkeydown="if(event.key==='Enter') doLogin()">
     <button class="login-btn" onclick="doLogin()">Entrar</button>
     <div class="login-err" id="loginErr"></div>
     <div class="login-footer">Sessão válida por 8 horas</div>
@@ -155,9 +155,16 @@
             </div>
             <button class="template-btn" onclick="downloadTemplate('despesas')">Baixar</button>
           </div>
+          <div class="template-card" style="border-color:rgba(167,139,250,.25);background:rgba(167,139,250,.04)">
+            <span class="template-icon">💵</span>
+            <div class="template-info">
+              <div class="template-name">Template de Faturamento Real</div>
+              <div class="template-desc">Modelo para informar o caixa real recebido por mês — independente dos orçamentos aprovados</div>
+            </div>
+            <button class="template-btn" style="background:var(--accent2)" onclick="downloadTemplate('faturamento')">Baixar</button>
+          </div>
         </div>
       </div>
-
       <div id="monthChips" class="month-chips"></div>
       <div id="sessionLoadedBadge"></div>
       <div id="detectionFeedback"></div>
