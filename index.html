@@ -1,517 +1,540 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
+
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Metrik — Dashboard Comercial</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Metrik — Dashboard Comercial</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link
+    href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@400;500;600&display=swap"
+    rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
 </head>
+
 <body>
 
-<!-- ═══════════ LOGIN ═══════════ -->
-<div id="loginScreen">
-  <div class="login-box">
-    <span class="login-logo">📊</span>
-    <div class="login-title">Metrik</div>
-    <div class="login-sub">Dashboard Comercial · Acesso Restrito</div>
-    <label class="login-label">Senha de Acesso</label>
-    <input type="password" id="loginPwd" class="login-input" placeholder="Digite sua senha" onkeydown="if(event.key==='Enter') doLogin()">
-    <button class="login-btn" onclick="doLogin()">Entrar</button>
-    <div class="login-err" id="loginErr"></div>
-    <div class="login-footer">Sessão válida por 8 horas</div>
+  <!-- ═══════════ LOGIN ═══════════ -->
+  <div id="loginScreen">
+    <div class="login-box">
+      <span class="login-logo">📊</span>
+      <div class="login-title">Metrik</div>
+      <div class="login-sub">Dashboard Comercial · Acesso Restrito</div>
+      <label class="login-label">Senha de Acesso</label>
+      <input type="password" id="loginPwd" class="login-input" placeholder="Digite sua senha"
+        onkeydown="if(event.key==='Enter') doLogin()">
+      <button class="login-btn" onclick="doLogin()">Entrar</button>
+      <div class="login-err" id="loginErr"></div>
+      <div class="login-footer">Sessão válida por 8 horas</div>
+    </div>
   </div>
-</div>
 
-<!-- ═══════════ LOADING ═══════════ -->
-<div id="loadingScreen">
-  <div class="spinner"></div>
-  <p id="loadingMsg">Processando...</p>
-</div>
-
-<!-- ═══════════ EXPORT OVERLAY ═══════════ -->
-<div id="exportOverlay">
-  <div class="export-modal">
-    <div class="export-spinner"></div>
-    <h3>Gerando arquivo</h3>
-    <p id="exportMsg">Aguarde...</p>
+  <!-- ═══════════ LOADING ═══════════ -->
+  <div id="loadingScreen">
+    <div class="spinner"></div>
+    <p id="loadingMsg">Processando...</p>
   </div>
-</div>
 
-<!-- ═══════════ DROP PORTAL ═══════════ -->
-<div id="dropPortal" class="drop-portal"></div>
-
-<!-- ═══════════ UPLOAD SCREEN ═══════════ -->
-<div id="uploadScreen" class="upload-screen-new">
-  <div class="metrik-upload-wrap">
-
-    <div class="metrik-header">
-      <span class="metrik-logo">📊</span>
-      <div class="metrik-title">Metrik</div>
-      <div class="metrik-sub">Configure sua clínica e importe os dados para começar</div>
+  <!-- ═══════════ EXPORT OVERLAY ═══════════ -->
+  <div id="exportOverlay">
+    <div class="export-modal">
+      <div class="export-spinner"></div>
+      <h3>Gerando arquivo</h3>
+      <p id="exportMsg">Aguarde...</p>
     </div>
-
-    <!-- Config -->
-    <div class="config-card">
-      <div class="config-card-title">⚙️ Configuração da Empresa</div>
-      <div class="config-grid">
-        <div class="config-field full">
-          <label class="config-label">Nome da Empresa</label>
-          <input type="text" id="cfgEmpresa" class="config-input" placeholder="Ex: Clínica Sorriso">
-        </div>
-        <div class="config-field">
-          <label class="config-label">Tipo de Vendedor</label>
-          <select id="cfgVendedor" class="config-select" onchange="handleSelectOther(this,'cfgVendedorCustom')">
-            <option value="Dentista">Dentista</option>
-            <option value="Vendedor">Vendedor</option>
-            <option value="Consultor">Consultor</option>
-            <option value="Corretor">Corretor</option>
-            <option value="Médico">Médico</option>
-            <option value="outro">Outro...</option>
-          </select>
-          <input type="text" id="cfgVendedorCustom" class="config-custom-input" placeholder="Digite o nome">
-        </div>
-        <div class="config-field">
-          <label class="config-label">Tipo de Cliente</label>
-          <select id="cfgCliente" class="config-select" onchange="handleSelectOther(this,'cfgClienteCustom')">
-            <option value="Paciente">Paciente</option>
-            <option value="Cliente">Cliente</option>
-            <option value="Lead">Lead</option>
-            <option value="outro">Outro...</option>
-          </select>
-          <input type="text" id="cfgClienteCustom" class="config-custom-input" placeholder="Digite o nome">
-        </div>
-        <div class="config-field">
-          <label class="config-label">Tipo de Proposta</label>
-          <select id="cfgProposta" class="config-select" onchange="handleSelectOther(this,'cfgPropostaCustom')">
-            <option value="Orçamento">Orçamento</option>
-            <option value="Proposta">Proposta</option>
-            <option value="Contrato">Contrato</option>
-            <option value="outro">Outro...</option>
-          </select>
-          <input type="text" id="cfgPropostaCustom" class="config-custom-input" placeholder="Digite o nome">
-        </div>
-        <div class="config-field">
-          <label class="config-label">Meta Global de Faturamento</label>
-          <input type="text" id="cfgMeta" class="config-input" placeholder="R$ 0,00">
-        </div>
-      </div>
-    </div>
-
-    <!-- Import -->
-    <div class="import-card">
-      <div class="import-card-title">📂 Importar Dados</div>
-
-      <div class="drop-zone-new" id="dropZone" onclick="document.getElementById('fileInput').click()">
-        <span class="drop-zone-icon">📁</span>
-        <div class="drop-zone-text">Arraste os arquivos ou clique para selecionar</div>
-        <div class="drop-zone-sub">Excel (.xlsx, .xls) · JSON de sessão salva</div>
-      </div>
-      <input type="file" id="fileInput" multiple accept=".xlsx,.xls,.json" onchange="handleFiles(event)">
-
-      <div class="import-btns">
-        <button class="import-btn budget" onclick="document.getElementById('fileInput').click()">
-          📋 Orçamentos
-        </button>
-        <button class="import-btn expense" onclick="document.getElementById('fileInput').click()">
-          💰 Despesas
-        </button>
-        <button class="import-btn purple" onclick="document.getElementById('fileInput').click()">
-          📁 Sessão JSON
-        </button>
-      </div>
-
-      <div class="columns-hint">
-        <div class="columns-hint-title">Colunas esperadas na planilha de orçamentos</div>
-        <div class="columns-list">
-          <span class="col-tag col-required" id="colVendedor">Dentista (obrigatório)</span>
-          <span class="col-tag col-required">Total Líquido (obrigatório)</span>
-          <span class="col-tag col-required">Situação (obrigatório)</span>
-          <span class="col-tag col-optional" id="colCliente">Paciente (opcional)</span>
-          <span class="col-tag col-optional">Emissão (opcional)</span>
-          <span class="col-tag col-optional">Aprovação (opcional)</span>
-          <span class="col-tag col-optional">Campanha (opcional)</span>
-          <span class="col-tag col-optional">Telefone (opcional)</span>
-        </div>
-      </div>
-
-      <div class="template-section">
-        <div class="template-title">📥 Baixar Templates</div>
-        <div class="template-cards">
-          <div class="template-card">
-            <span class="template-icon">📋</span>
-            <div class="template-info">
-              <div class="template-name">Template de Orçamentos</div>
-              <div class="template-desc">Modelo com todas as colunas necessárias para importar orçamentos mensais</div>
-            </div>
-            <button class="template-btn" onclick="downloadTemplate('orcamentos')">Baixar</button>
-          </div>
-          <div class="template-card">
-            <span class="template-icon">💰</span>
-            <div class="template-info">
-              <div class="template-name">Template de Despesas</div>
-              <div class="template-desc">Modelo com despesas mensais para análise financeira e margem de lucro</div>
-            </div>
-            <button class="template-btn" onclick="downloadTemplate('despesas')">Baixar</button>
-          </div>
-          <div class="template-card" style="border-color:rgba(167,139,250,.25);background:rgba(167,139,250,.04)">
-            <span class="template-icon">💵</span>
-            <div class="template-info">
-              <div class="template-name">Template de Faturamento Real</div>
-              <div class="template-desc">Modelo para informar o caixa real recebido por mês — independente dos orçamentos aprovados</div>
-            </div>
-            <button class="template-btn" style="background:var(--accent2)" onclick="downloadTemplate('faturamento')">Baixar</button>
-          </div>
-        </div>
-      </div>
-      <div id="monthChips" class="month-chips"></div>
-      <div id="sessionLoadedBadge"></div>
-      <div id="detectionFeedback"></div>
-      <div id="errBanner"></div>
-      <div id="suspectBanner"></div>
-
-      <button id="btnAnalyze" class="btn-primary btn-analyze" onclick="runAnalysis()">
-        🚀 Analisar Dados
-      </button>
-    </div>
-
   </div>
-</div>
 
-<!-- ═══════════ DASHBOARD ═══════════ -->
-<div id="dashboard">
-  <div class="container">
+  <!-- ═══════════ DROP PORTAL ═══════════ -->
+  <div id="dropPortal" class="drop-portal"></div>
 
-    <!-- TOPBAR -->
-    <div class="topbar">
-      <div class="topbar-left">
-        <h1>📊 <span id="dashTitle">Metrik</span></h1>
-        <p id="headerSub">Painel de performance comercial</p>
+  <!-- ═══════════ UPLOAD SCREEN ═══════════ -->
+  <div id="uploadScreen" class="upload-screen-new">
+    <div class="metrik-upload-wrap">
+
+      <div class="metrik-header">
+        <span class="metrik-logo">📊</span>
+        <div class="metrik-title">Metrik</div>
+        <div class="metrik-sub">Configure sua clínica e importe os dados para começar</div>
       </div>
-      <div class="topbar-right">
-        <span id="periodBadge" class="period-badge">🗓 —</span>
-        <span id="rangeActiveBadge" class="range-active-badge" style="display:none"></span>
 
-        <!-- Meta -->
-        <div class="goal-wrap">
-          <span class="goal-lbl">🎯 Meta</span>
-          <div class="goal-input-group">
-            <input type="text" id="goalInput" class="goal-input" placeholder="R$ 0,00"
-              onchange="setGoal(this.value)" onblur="setGoal(this.value)">
-            <div id="goalProgressBar" class="goal-progress-bar">
-              <div id="goalProgressFill" class="goal-progress-fill"></div>
-            </div>
+      <!-- Config -->
+      <div class="config-card">
+        <div class="config-card-title">⚙️ Configuração da Empresa</div>
+        <div class="config-grid">
+          <div class="config-field full">
+            <label class="config-label">Nome da Empresa</label>
+            <input type="text" id="cfgEmpresa" class="config-input" placeholder="Ex: Clínica Sorriso">
           </div>
-          <span id="goalProgressLabel" class="goal-progress-label"></span>
-        </div>
-
-        <button class="tbtn accent" onclick="openMetasMensaisModal()">🎯 Metas</button>
-        <button class="tbtn" onclick="openBenchmarksModal()">⚙️ Benchmarks</button>
-        <button class="tbtn csv" onclick="exportExcel()">📥 Excel</button>
-        <button class="tbtn green" onclick="exportPDF()">📄 PDF</button>
-        <button class="tbtn purple" onclick="exportPPTX()">📊 PPTX</button>
-        <button class="tbtn purple" onclick="saveSessionJSON()">💾 Salvar</button>
-        <button id="btnApresentacao" class="tbtn" onclick="toggleApresentacao()">🖥️ Apresentação</button>
-        <button class="tbtn" onclick="resetDash()">↩ Novo</button>
-      </div>
-    </div>
-
-    <!-- APRESENTAÇÃO CONTROLS -->
-    <div id="apresentacaoControls" style="display:none;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:10px 16px;margin-bottom:16px;align-items:center;gap:12px;flex-wrap:wrap">
-      <button onclick="apresentacaoPrev()" style="background:var(--surface2);border:1px solid var(--border2);color:var(--muted2);padding:6px 14px;border-radius:7px;cursor:pointer;font-size:13px">◀ Anterior</button>
-      <span id="apresentacaoTabLabel" style="font-size:12px;color:var(--muted2);font-weight:600;flex:1;text-align:center"></span>
-      <button onclick="apresentacaoNext()" style="background:var(--surface2);border:1px solid var(--border2);color:var(--muted2);padding:6px 14px;border-radius:7px;cursor:pointer;font-size:13px">Próximo ▶</button>
-      <div style="display:flex;gap:6px;align-items:center">
-        <span style="font-size:11px;color:var(--muted)">Intervalo:</span>
-        <button class="apres-interval-btn dfilter-btn" onclick="setApresInterval(5000,this)">5s</button>
-        <button class="apres-interval-btn dfilter-btn active" onclick="setApresInterval(8000,this)">8s</button>
-        <button class="apres-interval-btn dfilter-btn" onclick="setApresInterval(15000,this)">15s</button>
-        <button class="apres-interval-btn dfilter-btn" onclick="setApresInterval(0,this)">Manual</button>
-      </div>
-      <button onclick="sairApresentacao()" style="background:rgba(248,113,113,.1);border:1px solid rgba(248,113,113,.3);color:var(--red);padding:6px 14px;border-radius:7px;cursor:pointer;font-size:12px">✕ Sair</button>
-      <div style="width:100%;height:2px;background:var(--border);border-radius:1px;margin-top:4px">
-        <div id="apresentacaoProgress" style="height:100%;width:0%;background:var(--accent);border-radius:1px;transition:width .1s linear"></div>
-      </div>
-    </div>
-
-    <!-- RANGE FILTER -->
-    <div class="range-filter-wrap">
-      <label>📅 Intervalo:</label>
-      <select id="rangeFrom" class="range-select"></select>
-      <span style="color:var(--muted);font-size:12px">→</span>
-      <select id="rangeTo" class="range-select"></select>
-      <button class="range-apply" onclick="applyRangeFilter()">Aplicar</button>
-      <button class="range-clear" onclick="clearRangeFilter()">Limpar</button>
-    </div>
-
-    <!-- PERIOD SELECTOR -->
-    <div id="monthTabsKPI" class="month-tabs" style="margin-bottom:20px"></div>
-
-    <!-- EXEC SUMMARY -->
-    <div id="execSummary" class="exec-summary"></div>
-
-    <!-- NAV TABS -->
-    <div class="nav-tabs">
-      <button class="ntab active" onclick="showTab('visao',this)">Visão Geral</button>
-      <button class="ntab" id="tabVendedoresBtn" onclick="showTab('vendedores-detalhe',this)">Vendedores</button>
-      <button class="ntab" onclick="showTab('vendedores',this)">Evolução</button>
-      <button class="ntab" onclick="showTab('canais',this)">Canais</button>
-      <button class="ntab" onclick="showTab('recuperar',this)">Recuperar</button>
-      <button id="tabCmpBtn" class="ntab" style="display:none" onclick="showTab('comparativo',this)">Comparativo</button>
-      <button id="tabFinBtn" class="ntab" onclick="showTab('financeiro',this)">Financeiro</button>
-      <button class="ntab" onclick="showTab('acoes',this)">Ações</button>
-    </div>
-
-    <!-- ══════ TAB: VISÃO GERAL ══════ -->
-    <div class="tab-panel active" id="tab-visao">
-      <div id="kpiGrid" class="kpi-grid"></div>
-
-      <div class="card full">
-        <div class="card-title">
-          <span class="dot" style="background:var(--accent2)"></span>
-          Evolução Histórica
-        </div>
-        <div style="height:280px">
-          <canvas id="trendChart"></canvas>
-        </div>
-      </div>
-
-      <div class="grid-2">
-        <div class="card">
-          <div class="card-title">
-            <span class="dot" style="background:var(--accent)"></span>
-            <span id="lblFatVend">Faturamento por Vendedor</span>
+          <div class="config-field">
+            <label class="config-label">Tipo de Vendedor</label>
+            <select id="cfgVendedor" class="config-select" onchange="handleSelectOther(this,'cfgVendedorCustom')">
+              <option value="Dentista">Dentista</option>
+              <option value="Vendedor">Vendedor</option>
+              <option value="Consultor">Consultor</option>
+              <option value="Corretor">Corretor</option>
+              <option value="Médico">Médico</option>
+              <option value="outro">Outro...</option>
+            </select>
+            <input type="text" id="cfgVendedorCustom" class="config-custom-input" placeholder="Digite o nome">
           </div>
-          <div id="fatBars"></div>
-        </div>
-        <div class="card">
-          <div class="card-title">
-            <span class="dot" style="background:var(--green)"></span>
-            Canais de Captação
+          <div class="config-field">
+            <label class="config-label">Tipo de Cliente</label>
+            <select id="cfgCliente" class="config-select" onchange="handleSelectOther(this,'cfgClienteCustom')">
+              <option value="Paciente">Paciente</option>
+              <option value="Cliente">Cliente</option>
+              <option value="Lead">Lead</option>
+              <option value="outro">Outro...</option>
+            </select>
+            <input type="text" id="cfgClienteCustom" class="config-custom-input" placeholder="Digite o nome">
           </div>
-          <div id="canaisGrid" class="canal-grid"></div>
+          <div class="config-field">
+            <label class="config-label">Tipo de Proposta</label>
+            <select id="cfgProposta" class="config-select" onchange="handleSelectOther(this,'cfgPropostaCustom')">
+              <option value="Orçamento">Orçamento</option>
+              <option value="Proposta">Proposta</option>
+              <option value="Contrato">Contrato</option>
+              <option value="outro">Outro...</option>
+            </select>
+            <input type="text" id="cfgPropostaCustom" class="config-custom-input" placeholder="Digite o nome">
+          </div>
+          <div class="config-field">
+            <label class="config-label">Meta Global de Faturamento</label>
+            <input type="text" id="cfgMeta" class="config-input" placeholder="R$ 0,00">
+          </div>
         </div>
       </div>
 
-      <div class="sec">Análise Inteligente</div>
-      <div id="insGrid" class="ins-grid"></div>
-    </div>
+      <!-- Import -->
+      <div class="import-card">
+        <div class="import-card-title">📂 Importar Dados</div>
 
-    <!-- ══════ TAB: VENDEDORES DETALHE ══════ -->
-    <div class="tab-panel" id="tab-vendedores-detalhe">
-      <div class="sec"><span id="secVendedores">Filtrar por Vendedor</span></div>
-      <div id="dentFilterBtns" class="dent-filter"></div>
-      <div id="dentDetailView"></div>
+        <div class="drop-zone-new" id="dropZone" onclick="document.getElementById('fileInput').click()">
+          <span class="drop-zone-icon">📁</span>
+          <div class="drop-zone-text">Arraste os arquivos ou clique para selecionar</div>
+          <div class="drop-zone-sub">Excel (.xlsx, .xls) · JSON de sessão salva</div>
+        </div>
+        <input type="file" id="fileInput" multiple accept=".xlsx,.xls,.json" onchange="handleFiles(event)">
 
-      <div class="card full">
-        <div class="card-title">
-          <span class="dot" style="background:var(--accent)"></span>
-          <span id="lblPorVendedor">Por Vendedor</span>
-        </div>
-        <div id="sortBar" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
-          <button class="dfilter-btn active" onclick="sortDent('taxa',this)">Conversão</button>
-          <button class="dfilter-btn" onclick="sortDent('valor',this)">Faturamento</button>
-          <button class="dfilter-btn" onclick="sortDent('ticket',this)">Ticket</button>
-          <button class="dfilter-btn" onclick="sortDent('tempo',this)">Tempo</button>
-          <button class="dfilter-btn" onclick="sortDent('perdido',this)">Perdido</button>
-          <button class="dfilter-btn" onclick="sortDent('cancelados',this)">Cancelados</button>
-        </div>
-        <div class="tbl-wrap">
-          <table class="tbl">
-            <thead>
-              <tr>
-                <th>#</th>
-                <th id="thVendedor">Vendedor</th>
-                <th>Orç.</th>
-                <th>Conversão</th>
-                <th>Melhor Canal</th>
-                <th>Faturado</th>
-                <th>Ticket</th>
-                <th>Tempo</th>
-                <th>Canc.</th>
-                <th>Perdido</th>
-              </tr>
-            </thead>
-            <tbody id="dentBody"></tbody>
-          </table>
-        </div>
-      </div>
-
-      <div class="grid-2">
-        <div class="card">
-          <div class="card-title">
-            <span class="dot" style="background:var(--orange)"></span>
-            Cancelamentos
-            <span style="font-size:11px;color:var(--muted);font-weight:400;margin-left:auto" id="cancNote"></span>
-          </div>
-          <div id="cancList"></div>
-        </div>
-        <div class="card">
-          <div class="card-title">
-            <span class="dot" style="background:var(--orange)"></span>
-            <span id="lblPorVendedor2">por Vendedor</span>
-          </div>
-          <div id="cancByDent"></div>
-        </div>
-      </div>
-    </div>
-
-    <!-- ══════ TAB: EVOLUÇÃO VENDEDORES ══════ -->
-    <div class="tab-panel" id="tab-vendedores">
-      <div class="sec" id="secEvolucaoVendedor" style="margin-bottom:12px">Evolução por Vendedor</div>
-
-      <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:20px;align-items:flex-start">
-        <div class="card" style="min-width:200px;flex-shrink:0;padding:16px 20px">
-          <div id="seletorVendedorTitulo" style="font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-bottom:12px">
-            Selecionar Vendedores
-          </div>
-          <div id="vendedorSeletorBtns" style="display:flex;flex-direction:column;gap:6px"></div>
-          <button onclick="selecionarTodosVendedores()" style="margin-top:10px;width:100%;padding:6px;background:var(--surface2);border:1px solid var(--border);color:var(--muted);font-size:11px;border-radius:7px;cursor:pointer;">
-            Selecionar Todos
+        <div class="import-btns">
+          <button class="import-btn budget" onclick="document.getElementById('fileInput').click()">
+            📋 Orçamentos
           </button>
-          <button onclick="limparVendedores()" style="margin-top:6px;width:100%;padding:6px;background:var(--surface2);border:1px solid var(--border);color:var(--muted);font-size:11px;border-radius:7px;cursor:pointer;">
-            Limpar Seleção
+          <button class="import-btn expense" onclick="document.getElementById('fileInput').click()">
+            💰 Despesas
+          </button>
+          <button class="import-btn purple" onclick="document.getElementById('fileInput').click()">
+            📁 Sessão JSON
           </button>
         </div>
 
-        <div style="flex:1;min-width:0">
-          <div class="dfilter-row" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">
-            <button class="dfilter-btn active" onclick="setVendedorMetric('conversao',this)">Conversão %</button>
-            <button class="dfilter-btn" onclick="setVendedorMetric('faturamento',this)">Faturamento</button>
-            <button class="dfilter-btn" onclick="setVendedorMetric('ticket',this)">Ticket Médio</button>
-            <button class="dfilter-btn" onclick="setVendedorMetric('pacientes',this)" id="btnMetricPacientes">Fechados</button>
+        <div class="columns-hint">
+          <div class="columns-hint-title">Colunas esperadas na planilha de orçamentos</div>
+          <div class="columns-list">
+            <span class="col-tag col-required" id="colVendedor">Dentista (obrigatório)</span>
+            <span class="col-tag col-required">Total Líquido (obrigatório)</span>
+            <span class="col-tag col-required">Situação (obrigatório)</span>
+            <span class="col-tag col-optional" id="colCliente">Paciente (opcional)</span>
+            <span class="col-tag col-optional">Emissão (opcional)</span>
+            <span class="col-tag col-optional">Aprovação (opcional)</span>
+            <span class="col-tag col-optional">Campanha (opcional)</span>
+            <span class="col-tag col-optional">Telefone (opcional)</span>
+          </div>
+        </div>
+
+        <div class="template-section">
+          <div class="template-title">📥 Baixar Templates</div>
+          <div class="template-cards">
+            <div class="template-card">
+              <span class="template-icon">📋</span>
+              <div class="template-info">
+                <div class="template-name">Template de Orçamentos</div>
+                <div class="template-desc">Modelo com todas as colunas necessárias para importar orçamentos mensais
+                </div>
+              </div>
+              <button class="template-btn" onclick="downloadTemplate('orcamentos')">Baixar</button>
+            </div>
+            <div class="template-card">
+              <span class="template-icon">💰</span>
+              <div class="template-info">
+                <div class="template-name">Template de Despesas</div>
+                <div class="template-desc">Modelo com despesas mensais para análise financeira e margem de lucro</div>
+              </div>
+              <button class="template-btn" onclick="downloadTemplate('despesas')">Baixar</button>
+            </div>
+            <div class="template-card" style="border-color:rgba(167,139,250,.25);background:rgba(167,139,250,.04)">
+              <span class="template-icon">💵</span>
+              <div class="template-info">
+                <div class="template-name">Template de Faturamento Real</div>
+                <div class="template-desc">Modelo para informar o caixa real recebido por mês — independente dos
+                  orçamentos aprovados</div>
+              </div>
+              <button class="template-btn" style="background:var(--accent2)"
+                onclick="downloadTemplate('faturamento')">Baixar</button>
+            </div>
+          </div>
+        </div>
+        <div id="monthChips" class="month-chips"></div>
+        <div id="sessionLoadedBadge"></div>
+        <div id="detectionFeedback"></div>
+        <div id="errBanner"></div>
+        <div id="suspectBanner"></div>
+
+        <button id="btnAnalyze" class="btn-primary btn-analyze" onclick="runAnalysis()">
+          🚀 Analisar Dados
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ═══════════ DASHBOARD ═══════════ -->
+  <div id="dashboard">
+    <div class="container">
+
+      <!-- TOPBAR -->
+      <div class="topbar">
+        <div class="topbar-left">
+          <h1>📊 <span id="dashTitle">Metrik</span></h1>
+          <p id="headerSub">Painel de performance comercial</p>
+        </div>
+        <div class="topbar-right">
+          <span id="periodBadge" class="period-badge">🗓 —</span>
+          <span id="rangeActiveBadge" class="range-active-badge" style="display:none"></span>
+
+          <!-- Meta -->
+          <div class="goal-wrap">
+            <span class="goal-lbl">🎯 Meta</span>
+            <div class="goal-input-group">
+              <input type="text" id="goalInput" class="goal-input" placeholder="R$ 0,00" onchange="setGoal(this.value)"
+                onblur="setGoal(this.value)">
+              <div id="goalProgressBar" class="goal-progress-bar">
+                <div id="goalProgressFill" class="goal-progress-fill"></div>
+              </div>
+            </div>
+            <span id="goalProgressLabel" class="goal-progress-label"></span>
           </div>
 
-          <div class="card full" style="margin-bottom:20px">
+          <button class="tbtn accent" onclick="openMetasMensaisModal()">🎯 Metas</button>
+          <button class="tbtn" onclick="openBenchmarksModal()">⚙️ Benchmarks</button>
+          <button class="tbtn csv" onclick="exportExcel()">📥 Excel</button>
+          <button class="tbtn green" onclick="exportPDF()">📄 PDF</button>
+          <button class="tbtn purple" onclick="exportPPTX()">📊 PPTX</button>
+          <button class="tbtn purple" onclick="saveSessionJSON()">💾 Salvar</button>
+          <button id="btnApresentacao" class="tbtn" onclick="toggleApresentacao()">🖥️ Apresentação</button>
+          <button class="tbtn" onclick="resetDash()">↩ Novo</button>
+        </div>
+      </div>
+
+      <!-- APRESENTAÇÃO CONTROLS -->
+      <div id="apresentacaoControls"
+        style="display:none;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:10px 16px;margin-bottom:16px;align-items:center;gap:12px;flex-wrap:wrap">
+        <button onclick="apresentacaoPrev()"
+          style="background:var(--surface2);border:1px solid var(--border2);color:var(--muted2);padding:6px 14px;border-radius:7px;cursor:pointer;font-size:13px">◀
+          Anterior</button>
+        <span id="apresentacaoTabLabel"
+          style="font-size:12px;color:var(--muted2);font-weight:600;flex:1;text-align:center"></span>
+        <button onclick="apresentacaoNext()"
+          style="background:var(--surface2);border:1px solid var(--border2);color:var(--muted2);padding:6px 14px;border-radius:7px;cursor:pointer;font-size:13px">Próximo
+          ▶</button>
+        <div style="display:flex;gap:6px;align-items:center">
+          <span style="font-size:11px;color:var(--muted)">Intervalo:</span>
+          <button class="apres-interval-btn dfilter-btn" onclick="setApresInterval(5000,this)">5s</button>
+          <button class="apres-interval-btn dfilter-btn active" onclick="setApresInterval(8000,this)">8s</button>
+          <button class="apres-interval-btn dfilter-btn" onclick="setApresInterval(15000,this)">15s</button>
+          <button class="apres-interval-btn dfilter-btn" onclick="setApresInterval(0,this)">Manual</button>
+        </div>
+        <button onclick="sairApresentacao()"
+          style="background:rgba(248,113,113,.1);border:1px solid rgba(248,113,113,.3);color:var(--red);padding:6px 14px;border-radius:7px;cursor:pointer;font-size:12px">✕
+          Sair</button>
+        <div style="width:100%;height:2px;background:var(--border);border-radius:1px;margin-top:4px">
+          <div id="apresentacaoProgress"
+            style="height:100%;width:0%;background:var(--accent);border-radius:1px;transition:width .1s linear"></div>
+        </div>
+      </div>
+
+      <!-- RANGE FILTER -->
+      <div class="range-filter-wrap">
+        <label>📅 Intervalo:</label>
+        <select id="rangeFrom" class="range-select"></select>
+        <span style="color:var(--muted);font-size:12px">→</span>
+        <select id="rangeTo" class="range-select"></select>
+        <button class="range-apply" onclick="applyRangeFilter()">Aplicar</button>
+        <button class="range-clear" onclick="clearRangeFilter()">Limpar</button>
+      </div>
+
+      <!-- PERIOD SELECTOR -->
+      <div id="monthTabsKPI" class="month-tabs" style="margin-bottom:20px"></div>
+
+      <!-- EXEC SUMMARY -->
+      <div id="execSummary" class="exec-summary"></div>
+
+      <!-- NAV TABS -->
+      <div class="nav-tabs">
+        <button class="ntab active" onclick="showTab('visao',this)">Visão Geral</button>
+        <button class="ntab" id="tabVendedoresBtn" onclick="showTab('vendedores-detalhe',this)">Vendedores</button>
+        <button class="ntab" onclick="showTab('vendedores',this)">Evolução</button>
+        <button class="ntab" onclick="showTab('canais',this)">Canais</button>
+        <button class="ntab" onclick="showTab('recuperar',this)">Recuperar</button>
+        <button id="tabCmpBtn" class="ntab" style="display:none"
+          onclick="showTab('comparativo',this)">Comparativo</button>
+        <button id="tabFinBtn" class="ntab" onclick="showTab('financeiro',this)">Financeiro</button>
+        <button class="ntab" onclick="showTab('acoes',this)">Ações</button>
+      </div>
+
+      <!-- ══════ TAB: VISÃO GERAL ══════ -->
+      <div class="tab-panel active" id="tab-visao">
+        <div id="kpiGrid" class="kpi-grid"></div>
+
+        <div class="card full">
+          <div class="card-title">
+            <span class="dot" style="background:var(--accent2)"></span>
+            Evolução Histórica
+          </div>
+          <div style="height:280px">
+            <canvas id="trendChart"></canvas>
+          </div>
+        </div>
+
+        <div class="grid-2">
+          <div class="card">
             <div class="card-title">
               <span class="dot" style="background:var(--accent)"></span>
-              <span id="lblEvolucaoMensal">Evolução Mensal</span>
+              <span id="lblFatVend">Faturamento por Vendedor</span>
             </div>
-            <div style="overflow-x:auto">
-              <div style="height:340px;min-width:400px">
-                <canvas id="vendedorTrendChart"></canvas>
+            <div id="fatBars"></div>
+          </div>
+          <div class="card">
+            <div class="card-title">
+              <span class="dot" style="background:var(--green)"></span>
+              Canais de Captação
+            </div>
+            <div id="canaisGrid" class="canal-grid"></div>
+          </div>
+        </div>
+
+        <div class="sec">Análise Inteligente</div>
+        <div id="insGrid" class="ins-grid"></div>
+      </div>
+
+      <!-- ══════ TAB: VENDEDORES DETALHE ══════ -->
+      <div class="tab-panel" id="tab-vendedores-detalhe">
+        <div class="sec"><span id="secVendedores">Filtrar por Vendedor</span></div>
+        <div id="dentFilterBtns" class="dent-filter"></div>
+        <div id="dentDetailView"></div>
+
+        <div class="card full">
+          <div class="card-title">
+            <span class="dot" style="background:var(--accent)"></span>
+            <span id="lblPorVendedor">Por Vendedor</span>
+          </div>
+          <div id="sortBar" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+            <button class="dfilter-btn active" onclick="sortDent('taxa',this)">Conversão</button>
+            <button class="dfilter-btn" onclick="sortDent('valor',this)">Faturamento</button>
+            <button class="dfilter-btn" onclick="sortDent('ticket',this)">Ticket</button>
+            <button class="dfilter-btn" onclick="sortDent('tempo',this)">Tempo</button>
+            <button class="dfilter-btn" onclick="sortDent('perdido',this)">Perdido</button>
+            <button class="dfilter-btn" onclick="sortDent('cancelados',this)">Cancelados</button>
+          </div>
+          <div class="tbl-wrap">
+            <table class="tbl">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th id="thVendedor">Vendedor</th>
+                  <th>Orç.</th>
+                  <th>Conversão</th>
+                  <th>Melhor Canal</th>
+                  <th>Faturado</th>
+                  <th>Ticket</th>
+                  <th>Tempo</th>
+                  <th>Canc.</th>
+                  <th>Perdido</th>
+                </tr>
+              </thead>
+              <tbody id="dentBody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="grid-2">
+          <div class="card">
+            <div class="card-title">
+              <span class="dot" style="background:var(--orange)"></span>
+              Cancelamentos
+              <span style="font-size:11px;color:var(--muted);font-weight:400;margin-left:auto" id="cancNote"></span>
+            </div>
+            <div id="cancList"></div>
+          </div>
+          <div class="card">
+            <div class="card-title">
+              <span class="dot" style="background:var(--orange)"></span>
+              <span id="lblPorVendedor2">por Vendedor</span>
+            </div>
+            <div id="cancByDent"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ══════ TAB: EVOLUÇÃO VENDEDORES ══════ -->
+      <div class="tab-panel" id="tab-vendedores">
+        <div class="sec" id="secEvolucaoVendedor" style="margin-bottom:12px">Evolução por Vendedor</div>
+
+        <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:20px;align-items:flex-start">
+          <div class="card" style="min-width:200px;flex-shrink:0;padding:16px 20px">
+            <div id="seletorVendedorTitulo"
+              style="font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-bottom:12px">
+              Selecionar Vendedores
+            </div>
+            <div id="vendedorSeletorBtns" style="display:flex;flex-direction:column;gap:6px"></div>
+            <button onclick="selecionarTodosVendedores()"
+              style="margin-top:10px;width:100%;padding:6px;background:var(--surface2);border:1px solid var(--border);color:var(--muted);font-size:11px;border-radius:7px;cursor:pointer;">
+              Selecionar Todos
+            </button>
+            <button onclick="limparVendedores()"
+              style="margin-top:6px;width:100%;padding:6px;background:var(--surface2);border:1px solid var(--border);color:var(--muted);font-size:11px;border-radius:7px;cursor:pointer;">
+              Limpar Seleção
+            </button>
+          </div>
+
+          <div style="flex:1;min-width:0">
+            <div class="dfilter-row" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">
+              <button class="dfilter-btn active" onclick="setVendedorMetric('conversao',this)">Conversão %</button>
+              <button class="dfilter-btn" onclick="setVendedorMetric('faturamento',this)">Faturamento</button>
+              <button class="dfilter-btn" onclick="setVendedorMetric('ticket',this)">Ticket Médio</button>
+              <button class="dfilter-btn" onclick="setVendedorMetric('pacientes',this)"
+                id="btnMetricPacientes">Fechados</button>
+            </div>
+
+            <div class="card full" style="margin-bottom:20px">
+              <div class="card-title">
+                <span class="dot" style="background:var(--accent)"></span>
+                <span id="lblEvolucaoMensal">Evolução Mensal</span>
+              </div>
+              <div style="overflow-x:auto">
+                <div style="height:340px;min-width:400px">
+                  <canvas id="vendedorTrendChart"></canvas>
+                </div>
               </div>
             </div>
           </div>
         </div>
-      </div>
 
-      <div class="card full" style="margin-bottom:20px">
-        <div class="card-title">
-          <span class="dot" style="background:var(--green)"></span>
-          <span id="lblRankingAcumulado">Ranking Acumulado</span>
-        </div>
-        <div class="tbl-wrap">
-          <table class="tbl" id="vendedorRankingTable"></table>
-        </div>
-      </div>
-
-      <div class="card full">
-        <div class="card-title">
-          <span class="dot" style="background:var(--accent2)"></span>
-          <span id="lblAnaliseIndividual">Análise Individual</span>
-        </div>
-        <div id="vendedorAnalise"></div>
-      </div>
-    </div>
-
-    <!-- ══════ TAB: CANAIS ══════ -->
-    <div class="tab-panel" id="tab-canais">
-      <div class="grid-2" style="margin-bottom:20px">
-        <div class="card">
-          <div class="card-title">
-            <span class="dot" style="background:var(--accent)"></span>
-            Receita por Canal
-          </div>
-          <div style="height:260px">
-            <canvas id="canalDonutChart"></canvas>
-          </div>
-        </div>
-        <div class="card">
-          <div class="card-title">
-            <span class="dot" style="background:var(--accent2)"></span>
-            Distribuição Detalhada
-          </div>
-          <div id="canalDonutLegend"></div>
-        </div>
-      </div>
-
-      <div class="grid-2" style="margin-bottom:20px">
-        <div class="card">
+        <div class="card full" style="margin-bottom:20px">
           <div class="card-title">
             <span class="dot" style="background:var(--green)"></span>
-            Taxa de Conversão por Canal
+            <span id="lblRankingAcumulado">Ranking Acumulado</span>
           </div>
-          <div id="canalConvBars"></div>
+          <div class="tbl-wrap">
+            <table class="tbl" id="vendedorRankingTable"></table>
+          </div>
         </div>
-        <div class="card">
+
+        <div class="card full">
           <div class="card-title">
-            <span class="dot" style="background:var(--yellow)"></span>
-            Receita por Canal
+            <span class="dot" style="background:var(--accent2)"></span>
+            <span id="lblAnaliseIndividual">Análise Individual</span>
           </div>
-          <div id="canalFatBars"></div>
+          <div id="vendedorAnalise"></div>
         </div>
       </div>
 
-      <div class="card full" style="margin-bottom:20px">
-        <div class="card-title">
-          <span class="dot" style="background:var(--accent)"></span>
-          Tabela Detalhada
+      <!-- ══════ TAB: CANAIS ══════ -->
+      <div class="tab-panel" id="tab-canais">
+        <div class="grid-2" style="margin-bottom:20px">
+          <div class="card">
+            <div class="card-title">
+              <span class="dot" style="background:var(--accent)"></span>
+              Receita por Canal
+            </div>
+            <div style="height:260px">
+              <canvas id="canalDonutChart"></canvas>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-title">
+              <span class="dot" style="background:var(--accent2)"></span>
+              Distribuição Detalhada
+            </div>
+            <div id="canalDonutLegend"></div>
+          </div>
         </div>
-        <div class="tbl-wrap">
-          <table class="tbl" id="canalTable"></table>
+
+        <div class="grid-2" style="margin-bottom:20px">
+          <div class="card">
+            <div class="card-title">
+              <span class="dot" style="background:var(--green)"></span>
+              Taxa de Conversão por Canal
+            </div>
+            <div id="canalConvBars"></div>
+          </div>
+          <div class="card">
+            <div class="card-title">
+              <span class="dot" style="background:var(--yellow)"></span>
+              Receita por Canal
+            </div>
+            <div id="canalFatBars"></div>
+          </div>
+        </div>
+
+        <div class="card full" style="margin-bottom:20px">
+          <div class="card-title">
+            <span class="dot" style="background:var(--accent)"></span>
+            Tabela Detalhada
+          </div>
+          <div class="tbl-wrap">
+            <table class="tbl" id="canalTable"></table>
+          </div>
+        </div>
+
+        <div class="card full">
+          <div class="card-title">
+            <span class="dot" style="background:var(--accent2)"></span>
+            <span id="lblCanaisPorVendedor">Canais por Vendedor</span>
+          </div>
+          <div id="canalDentTable"></div>
         </div>
       </div>
 
-      <div class="card full">
-        <div class="card-title">
-          <span class="dot" style="background:var(--accent2)"></span>
-          <span id="lblCanaisPorVendedor">Canais por Vendedor</span>
+      <!-- ══════ TAB: RECUPERAR ══════ -->
+      <div class="tab-panel" id="tab-recuperar">
+        <div class="sec"><span id="secRecuperar">Orçamentos Vencidos — Foco em Follow-up</span></div>
+        <div class="card full">
+          <div class="card-title">
+            <span class="dot" style="background:var(--red)"></span>
+            <span id="lblTopVencidos">Top Orçamentos Vencidos</span>
+          </div>
+          <div id="vencList"></div>
         </div>
-        <div id="canalDentTable"></div>
       </div>
-    </div>
 
-    <!-- ══════ TAB: RECUPERAR ══════ -->
-    <div class="tab-panel" id="tab-recuperar">
-      <div class="sec"><span id="secRecuperar">Orçamentos Vencidos — Foco em Follow-up</span></div>
-      <div class="card full">
-        <div class="card-title">
-          <span class="dot" style="background:var(--red)"></span>
-          <span id="lblTopVencidos">Top Orçamentos Vencidos</span>
-        </div>
-        <div id="vencList"></div>
+      <!-- ══════ TAB: COMPARATIVO ══════ -->
+      <div class="tab-panel" id="tab-comparativo">
+        <div class="sec">Comparativo de Períodos</div>
+        <div id="cmpMonthTabs" class="month-tabs" style="margin-bottom:20px"></div>
+        <div id="cmpContent"></div>
       </div>
-    </div>
 
-    <!-- ══════ TAB: COMPARATIVO ══════ -->
-    <div class="tab-panel" id="tab-comparativo">
-      <div class="sec">Comparativo de Períodos</div>
-      <div id="cmpMonthTabs" class="month-tabs" style="margin-bottom:20px"></div>
-      <div id="cmpContent"></div>
-    </div>
+      <!-- ══════ TAB: FINANCEIRO ══════ -->
+      <div class="tab-panel" id="tab-financeiro">
+        <div id="finContent"></div>
+      </div>
 
-    <!-- ══════ TAB: FINANCEIRO ══════ -->
-    <div class="tab-panel" id="tab-financeiro">
-      <div id="finContent"></div>
-    </div>
+      <!-- ══════ TAB: AÇÕES ══════ -->
+      <div class="tab-panel" id="tab-acoes">
+        <div class="sec">Plano de Ação Prioritário</div>
+        <div id="acaoList" class="acao-list"></div>
+      </div>
 
-    <!-- ══════ TAB: AÇÕES ══════ -->
-    <div class="tab-panel" id="tab-acoes">
-      <div class="sec">Plano de Ação Prioritário</div>
-      <div id="acaoList" class="acao-list"></div>
     </div>
-
   </div>
-</div>
 
-<!-- SCRIPTS -->
-<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js"></script>
-<script src="script.js"></script>
+  <!-- SCRIPTS -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js"></script>
+  <script src="script.js"></script>
 </body>
+
 </html>

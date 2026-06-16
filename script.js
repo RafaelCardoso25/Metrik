@@ -3934,6 +3934,9 @@ function iniciarTimerApresentacao() {
 // ═══════════════════════════════════════
 //  EXPORT PDF
 // ═══════════════════════════════════════
+// ═══════════════════════════════════════
+//  EXPORT PDF
+// ═══════════════════════════════════════
 function exportPDF() {
   const overlay = document.getElementById('exportOverlay');
   document.getElementById('exportMsg').textContent = 'Gerando relatorio PDF...';
@@ -3972,6 +3975,68 @@ function exportPDF() {
           .replace(/\s+/g, ' ').trim();
       };
 
+      // ── Determina ano ativo e meses equivalentes do ano anterior ──
+      const anoAtivo = activeYear !== null ? +activeYear
+        : (activeMonth >= 0 && MONTHS[activeMonth] ? +MONTHS[activeMonth].ano || null : null);
+      const anoAnterior = anoAtivo !== null ? anoAtivo - 1 : null;
+
+      const mesesDoAno = anoAtivo !== null
+        ? MONTHS.filter(m => +m.ano === +anoAtivo)
+        : MONTHS;
+      const mesesAnoAnterior = anoAnterior !== null
+        ? MONTHS.filter(m => +m.ano === +anoAnterior)
+        : [];
+
+      // ── Helper: obtém faturamento real de um mês pela chave ──
+      // Retorna o valor da planilha de faturamento se existir, senão null
+      const getFatReal = key => {
+        if (!key) return null;
+        const fat = parsedFaturamento[key];
+        if (fat === undefined || fat === null) return null;
+        return typeof fat === 'object' ? (fat.total || fat.valor || 0) : +fat;
+      };
+
+      // ── Verifica se ambos os anos têm planilha de faturamento ──
+      // Para usar faturamento real nos blocos financeiros,
+      // AMBOS os anos precisam ter dados de faturamento
+      const chavesMesesAtivo    = mesesDoAno.map(m => m.key).filter(Boolean);
+      const chavesMesesAnterior = mesesAnoAnterior.map(m => m.key).filter(Boolean);
+      const temFatAtivo    = chavesMesesAtivo.some(k    => getFatReal(k) !== null);
+      const temFatAnterior = chavesMesesAnterior.length === 0 || chavesMesesAnterior.some(k => getFatReal(k) !== null);
+      // usaFatReal = true apenas se o ano ativo TEM faturamento real
+      // Para o comparativo anual, exige que ambos tenham
+      const usaFatRealAtivo    = temFatAtivo;
+      const usaFatRealAmbos    = temFatAtivo && (mesesAnoAnterior.length === 0 || chavesMesesAnterior.some(k => getFatReal(k) !== null));
+
+      // ── Helper: receita de um mês (faturamento real se disponível, senão aprovado) ──
+      const getReceitaMes = (m, usaFat) => {
+        if (!usaFat) return m.geral.aprovado;
+        const fat = getFatReal(m.key);
+        return fat !== null ? fat : m.geral.aprovado;
+      };
+
+      // ── Comparativo com período anterior (usa apenas receita de orçamentos) ──
+      let prevReceitaAdj    = prev_ ? prev_.geral.aprovado   : 0;
+      let prevTaxaAdj       = prev_ ? prev_.geral.taxa       : 0;
+      let prevPerdidoAdj    = prev_ ? prev_.geral.perdido    : 0;
+      let prevCanceladosAdj = prev_ ? prev_.geral.cancelados : 0;
+      let prevTicketAdj     = prev_ && prev_.geral.aprovados > 0
+        ? prev_.geral.aprovado / prev_.geral.aprovados : 0;
+
+      if (anoAtivo !== null && mesesAnoAnterior.length > 0) {
+        const mesesAtivosIdx = mesesDoAno.map(m => +m.mes);
+        const mesesAntEquiv  = mesesAnoAnterior.filter(m => mesesAtivosIdx.includes(+m.mes));
+        if (mesesAntEquiv.length > 0) {
+          prevReceitaAdj    = mesesAntEquiv.reduce((a, m) => a + m.geral.aprovado,   0);
+          prevPerdidoAdj    = mesesAntEquiv.reduce((a, m) => a + m.geral.perdido,    0);
+          prevCanceladosAdj = mesesAntEquiv.reduce((a, m) => a + m.geral.cancelados, 0);
+          const totAnt  = mesesAntEquiv.reduce((a, m) => a + m.geral.total,    0);
+          const aprvAnt = mesesAntEquiv.reduce((a, m) => a + m.geral.aprovados, 0);
+          prevTaxaAdj   = totAnt  > 0 ? +(aprvAnt / totAnt * 100).toFixed(1) : 0;
+          prevTicketAdj = aprvAnt > 0 ? prevReceitaAdj / aprvAnt : 0;
+        }
+      }
+
       const pageBg = () => {
         doc.setFillColor(...cDark);
         doc.rect(0, 0, 210, 297, 'F');
@@ -4009,7 +4074,6 @@ function exportPDF() {
         }
       };
 
-      // ── calcula total de páginas ──
       const hasFin = g.hasDespesas || Object.keys(parsedExpenses).length > 0 || Object.keys(parsedFaturamento).length > 0;
       const totalPags = hasFin ? 6 : 5;
       let pagNum = 1;
@@ -4111,7 +4175,6 @@ function exportPDF() {
         y += 28;
       }
 
-      // Índice de concentração
       if (M.dentistas.length > 1) {
         y = secTitle('Indice de Concentracao de Receita', y);
         const topD = [...M.dentistas].sort((a, b) => b.valor_aprovado - a.valor_aprovado)[0];
@@ -4138,20 +4201,58 @@ function exportPDF() {
       doc.addPage(); pagNum++; pageBg();
       y = 14;
 
-      // comparativo anterior
       y = secTitle('Comparativo com Periodo Anterior', y);
       if (prev_) {
-        const diffRec = g.aprovado - prev_.geral.aprovado;
-        const diffTaxa = +(g.taxa - prev_.geral.taxa).toFixed(1);
+        // ── Se ambos os anos tiverem faturamento real, usa faturamento real ──
+        let recAtualComp = g.aprovado;
+        let recAntComp   = prevReceitaAdj;
+
+        if (anoAtivo !== null && mesesDoAno.length > 0) {
+          const fatRealAtivo = mesesDoAno.reduce((acc, m) => {
+            const fat = getFatReal(m.key);
+            return fat !== null ? acc + fat : acc + m.geral.aprovado;
+          }, 0);
+          if (temFatAtivo) recAtualComp = fatRealAtivo;
+        }
+
+        if (usaFatRealAmbos && anoAnterior !== null && mesesAnoAnterior.length > 0) {
+          const mesesAtivosIdx = mesesDoAno.map(m => +m.mes);
+          const mesesAntEquiv  = mesesAnoAnterior.filter(m => mesesAtivosIdx.includes(+m.mes));
+          if (mesesAntEquiv.length > 0) {
+            const fatRealAnt = mesesAntEquiv.reduce((acc, m) => {
+              const fat = getFatReal(m.key);
+              return fat !== null ? acc + fat : acc + m.geral.aprovado;
+            }, 0);
+            recAntComp = fatRealAnt;
+          }
+        }
+
+        const diffRec  = recAtualComp - recAntComp;
+        const diffTaxa = +(g.taxa - prevTaxaAdj).toFixed(1);
+        const fonteComp = usaFatRealAmbos ? ' | faturamento real (caixa)' : '';
+        const notaPeriodo = anoAtivo !== null && mesesAnoAnterior.length > 0
+          ? ' (mesmo periodo: ' + mesesDoAno.length + ' meses)'
+          : '';
+
         doc.setFillColor(...cSurf);
-        doc.roundedRect(mg, y, W - mg * 2, 14, 2, 2, 'F');
+        doc.roundedRect(mg, y, W - mg * 2, 18, 2, 2, 'F');
         doc.setFont('helvetica', 'normal');
         doc.setFontSize(8);
         doc.setTextColor(...cText);
-        const recTxt = 'Receita: ' + clean(fmtK(prev_.geral.aprovado)) + ' -> ' + clean(fmtK(g.aprovado)) + '  (' + (diffRec >= 0 ? '+' : '') + clean(fmtK(diffRec)) + ')';
-        const taxaTxt = '   |   Conversao: ' + prev_.geral.taxa + '% -> ' + g.taxa + '%  (' + (diffTaxa >= 0 ? '+' : '') + diffTaxa + '%)';
+        const recTxt  = 'Receita: ' + clean(fmtK(recAntComp)) + ' -> ' + clean(fmtK(recAtualComp)) +
+                        '  (' + (diffRec >= 0 ? '+' : '') + clean(fmtK(diffRec)) + ')';
+        const taxaTxt = '   |   Conversao: ' + prevTaxaAdj + '% -> ' + g.taxa + '%  (' + (diffTaxa >= 0 ? '+' : '') + diffTaxa + '%)';
         doc.text(recTxt + taxaTxt, mg + 4, y + 8);
-        y += 18;
+        if (notaPeriodo) {
+          doc.setFont('helvetica', 'normal');
+          doc.setFontSize(6.5);
+          doc.setTextColor(...cMuted);
+          doc.text(
+            clean('Comparativo limitado ao mesmo periodo: ' + anoAnterior + ' vs ' + anoAtivo + notaPeriodo + fonteComp),
+            mg + 4, y + 14
+          );
+        }
+        y += notaPeriodo ? 22 : 18;
       } else {
         doc.setFont('helvetica', 'normal');
         doc.setFontSize(8);
@@ -4180,7 +4281,9 @@ function exportPDF() {
           clean(fmtK(d.valor_aprovado)), clean(fmtK(d.ticket_medio)),
           d.tempo_medio + 'd', String(d.cancelados), clean(fmtK(d.valor_perdido))
         ];
-        const tcs = [cMuted, cText, cMuted, d.taxa >= (_benchmarks.conversaoIdeal || 75) ? cGreen : d.taxa >= (_benchmarks.conversaoCritica || 60) ? cYellow : cRed, cGreen, cText, cMuted, cOrange, cRed];
+        const tcs = [cMuted, cText, cMuted,
+          d.taxa >= (_benchmarks.conversaoIdeal || 75) ? cGreen : d.taxa >= (_benchmarks.conversaoCritica || 60) ? cYellow : cRed,
+          cGreen, cText, cMuted, cOrange, cRed];
         xd = mg;
         cols.forEach((col, i) => {
           doc.setFont('helvetica', i === 1 ? 'bold' : 'normal');
@@ -4191,7 +4294,6 @@ function exportPDF() {
       });
       y += 4;
 
-      // barras faturamento
       y = secTitle('Faturamento por ' + clean(vLabel), y);
       const maxFB = Math.max(...sortedD.map(d => d.valor_aprovado), 1);
       sortedD.slice(0, 8).forEach(d => {
@@ -4230,7 +4332,9 @@ function exportPDF() {
       sortedC.forEach((c, ri) => {
         if (ri % 2 === 0) { doc.setFillColor(...cSurf); doc.roundedRect(mg, y - 1, W - mg * 2, 8, 1, 1, 'F'); }
         const colsC = [clean(canalDisplay(c.canal)), String(c.total), String(c.aprovados), c.taxa + '%', clean(fmtK(c.valor)), clean(fmtK(c.ticket))];
-        const tcsC = [cText, cMuted, cMuted, taxaColor(c.taxa) === 'var(--green)' ? cGreen : taxaColor(c.taxa) === 'var(--yellow)' ? cYellow : cRed, cGreen, cText];
+        const tcsC = [cText, cMuted, cMuted,
+          taxaColor(c.taxa) === 'var(--green)' ? cGreen : taxaColor(c.taxa) === 'var(--yellow)' ? cYellow : cRed,
+          cGreen, cText];
         xc = mg;
         colsC.forEach((col, i) => {
           doc.setFont('helvetica', i === 0 ? 'bold' : 'normal');
@@ -4267,7 +4371,6 @@ function exportPDF() {
       doc.addPage(); pagNum++; pageBg();
       y = 14;
 
-      // vencidos
       const topVenc = M.topVencidos.slice(0, 8);
       if (topVenc.length > 0) {
         y = secTitle(pLabelP + ' Vencidos — Prioridade de Follow-up', y);
@@ -4304,7 +4407,6 @@ function exportPDF() {
         y += 6;
       }
 
-      // insights
       y = secTitle('Insights e Alertas Automaticos', y);
       const ins = generateInsights(M);
       ins.sort((a, b) => ({ 'a': 0, 'o': 1, 'w': 2, 'i': 3, 'g': 4 }[a.t] || 9) - ({ 'a': 0, 'o': 1, 'w': 2, 'i': 3, 'g': 4 }[b.t] || 9));
@@ -4333,7 +4435,19 @@ function exportPDF() {
       doc.addPage(); pagNum++; pageBg();
       y = 14;
       y = secTitle('Plano de Acao — Proximos Passos', y);
-      const acoes = getAcoesList(M, prev_);
+
+      const prevAjustado = prev_ ? {
+        ...prev_,
+        geral: {
+          ...prev_.geral,
+          aprovado:   prevReceitaAdj,
+          taxa:       prevTaxaAdj,
+          perdido:    prevPerdidoAdj,
+          cancelados: prevCanceladosAdj,
+        }
+      } : null;
+
+      const acoes = getAcoesList(M, prevAjustado);
       const priC = { ph: cRed, pm: cYellow, pl: cGreen };
       const priL = { ph: 'URGENTE', pm: 'ESTA SEMANA', pl: 'ESTE MES' };
       acoes.forEach((a, i) => {
@@ -4358,45 +4472,46 @@ function exportPDF() {
       addFooter(pagNum, totalPags);
 
       // ══════════════════════════════════════
-      // PÁGINA 6 — ANÁLISE FINANCEIRA (se houver)
+      // PÁGINA 6 — ANÁLISE FINANCEIRA
       // ══════════════════════════════════════
       if (hasFin) {
         doc.addPage(); pagNum++; pageBg();
         y = 14;
 
-        // detecta fonte e meses
-        const anoAtivo = M.ano || (activeYear !== null ? +activeYear : null);
-        const chavesMeses = anoAtivo
-          ? getMesesFinanceirosPorAno(anoAtivo)
+        const anoAtivoFin = M.ano || (activeYear !== null ? +activeYear : null);
+        const chavesMeses = anoAtivoFin
+          ? getMesesFinanceirosPorAno(anoAtivoFin)
           : (M.key && !M.isYear && !M.isRange ? [M.key] : []);
 
-        const usaFaturamento = _finModoReceita === 'faturamento' && chavesMeses.some(k => parsedFaturamento[k] !== undefined);
-        const fonteLabel = usaFaturamento ? 'faturamento real (caixa)' : 'orcamentos aprovados';
+        // ── Decide se usa faturamento real ──
+        // Usa faturamento real SE o ano ativo tiver planilha de faturamento
+        const temFatRealPag6 = chavesMeses.some(k => getFatReal(k) !== null);
+        const fonteLabel = temFatRealPag6 ? 'faturamento real (caixa)' : 'orcamentos aprovados';
 
-        // agrega totais
         let fatTotalFin = 0, despTotalFin = 0;
         const mesesFinData = chavesMeses.map(k => {
           const mfin = getFinMesDataComReceita(k);
           if (!mfin || mfin._semDados) return null;
-          fatTotalFin += mfin.geral.aprovado;
+          // Substitui receita pelo faturamento real se disponível
+          const fatRealK = getFatReal(k);
+          const receitaFinal = temFatRealPag6 && fatRealK !== null ? fatRealK : mfin.geral.aprovado;
+          fatTotalFin  += receitaFinal;
           despTotalFin += mfin.geral.despesas;
-          return mfin;
+          return { ...mfin, geral: { ...mfin.geral, aprovado: receitaFinal } };
         }).filter(Boolean);
 
-        const lucroTotalFin = fatTotalFin - despTotalFin;
+        const lucroTotalFin  = fatTotalFin - despTotalFin;
         const margemTotalFin = fatTotalFin > 0 ? +((lucroTotalFin / fatTotalFin) * 100).toFixed(1) : 0;
-        const ratioFin = fatTotalFin > 0 ? +((despTotalFin / fatTotalFin) * 100).toFixed(1) : 0;
-        const marColorFin = margemTotalFin >= (_benchmarks.margemIdeal || 20) ? cGreen
+        const ratioFin       = fatTotalFin > 0 ? +((despTotalFin / fatTotalFin) * 100).toFixed(1) : 0;
+        const marColorFin    = margemTotalFin >= (_benchmarks.margemIdeal || 20) ? cGreen
           : margemTotalFin >= (_benchmarks.margemBaixa || 10) ? cYellow
           : margemTotalFin >= 0 ? cOrange : cRed;
-        const marLabelFin = margemTotalFin >= (_benchmarks.margemIdeal || 20) ? 'excelente'
+        const marLabelFin    = margemTotalFin >= (_benchmarks.margemIdeal || 20) ? 'excelente'
           : margemTotalFin >= (_benchmarks.margemBaixa || 10) ? 'saudavel'
           : margemTotalFin >= 0 ? 'baixa' : 'negativa';
 
-        // título
         y = secTitle('Analise Financeira | ' + clean(M.periodo), y);
 
-        // badge fonte
         doc.setFillColor(...cSurf2);
         doc.roundedRect(mg, y, W - mg * 2, 9, 1, 1, 'F');
         doc.setFont('helvetica', 'normal'); doc.setFontSize(7); doc.setTextColor(...cMuted);
@@ -4405,12 +4520,11 @@ function exportPDF() {
         doc.text(fonteLabel, mg + 38, y + 6);
         y += 13;
 
-        // 4 KPIs financeiros
         const kfin = [
-          { l: 'Receita Total',    v: fmtK(fatTotalFin),    s: fonteLabel,                                           c: cGreen },
-          { l: 'Despesas Totais',  v: fmtK(despTotalFin),   s: ratioFin + '% da receita',                            c: cRed },
-          { l: 'Lucro Liquido',    v: fmtK(lucroTotalFin),  s: lucroTotalFin >= 0 ? 'resultado positivo' : 'prejuizo', c: lucroTotalFin >= 0 ? cGreen : cRed },
-          { l: 'Margem Liquida',   v: margemTotalFin + '%', s: marLabelFin,                                          c: marColorFin },
+          { l: 'Receita Total',   v: fmtK(fatTotalFin),    s: fonteLabel,                                              c: cGreen },
+          { l: 'Despesas Totais', v: fmtK(despTotalFin),   s: ratioFin + '% da receita',                               c: cRed   },
+          { l: 'Lucro Liquido',   v: fmtK(lucroTotalFin),  s: lucroTotalFin >= 0 ? 'resultado positivo' : 'prejuizo',  c: lucroTotalFin >= 0 ? cGreen : cRed },
+          { l: 'Margem Liquida',  v: margemTotalFin + '%', s: marLabelFin,                                             c: marColorFin },
         ];
         const kfw = (W - mg * 2 - 6) / 4;
         kfin.forEach(({ l, v, s, c }, i) => {
@@ -4428,12 +4542,11 @@ function exportPDF() {
         });
         y += 24;
 
-        // barra resumo receita vs despesas vs lucro
         y = secTitle('Receita vs Despesas vs Lucro', y);
         const maxBarFin = Math.max(fatTotalFin, despTotalFin, Math.abs(lucroTotalFin), 1);
         const barItems = [
-          { l: 'Receita',      v: fatTotalFin,    c: cGreen },
-          { l: 'Despesas',     v: despTotalFin,   c: cRed },
+          { l: 'Receita',       v: fatTotalFin,   c: cGreen },
+          { l: 'Despesas',      v: despTotalFin,  c: cRed   },
           { l: 'Lucro Liquido', v: lucroTotalFin, c: lucroTotalFin >= 0 ? [79, 156, 249] : cOrange },
         ];
         barItems.forEach(b => {
@@ -4450,7 +4563,6 @@ function exportPDF() {
         });
         y += 4;
 
-        // tabela evolução mensal
         if (mesesFinData.length > 0) {
           y = secTitle('Evolucao Financeira por Mes', y);
           const thFin = ['Mes', 'Receita', 'Despesas', 'Lucro', 'Margem'];
@@ -4465,15 +4577,15 @@ function exportPDF() {
           y += 10;
           mesesFinData.forEach((mf, ri) => {
             if (y > 270) return;
-            const fat = mf.geral.aprovado;
+            const fat  = mf.geral.aprovado;
             const desp = mf.geral.despesas;
-            const luc = fat - desp;
-            const mar = fat > 0 ? +((luc / fat) * 100).toFixed(1) : 0;
-            const mc2 = mar >= (_benchmarks.margemIdeal || 20) ? cGreen
+            const luc  = fat - desp;
+            const mar  = fat > 0 ? +((luc / fat) * 100).toFixed(1) : 0;
+            const mc2  = mar >= (_benchmarks.margemIdeal || 20) ? cGreen
               : mar >= (_benchmarks.margemBaixa || 10) ? cYellow
               : mar >= 0 ? cOrange : cRed;
             if (ri % 2 === 0) { doc.setFillColor(...cSurf); doc.roundedRect(mg, y - 1, W - mg * 2, 8, 1, 1, 'F'); }
-            const rowCols = [clean(mf.periodo), clean(fmtK(fat)), clean(fmtK(desp)), clean(fmtK(luc)), mar + '%'];
+            const rowCols   = [clean(mf.periodo), clean(fmtK(fat)), clean(fmtK(desp)), clean(fmtK(luc)), mar + '%'];
             const rowColors = [cText, cGreen, cRed, luc >= 0 ? cGreen : cRed, mc2];
             xf = mg;
             rowCols.forEach((col, i) => {
@@ -4486,7 +4598,6 @@ function exportPDF() {
           y += 6;
         }
 
-        // insights financeiros
         const insFinPDF = generateFinancialInsights(mesesFinData);
         insFinPDF.sort((a, b) => ({ 'a': 0, 'o': 1, 'w': 2, 'i': 3, 'g': 4 }[a.t] || 9) - ({ 'a': 0, 'o': 1, 'w': 2, 'i': 3, 'g': 4 }[b.t] || 9));
         if (insFinPDF.length > 0 && y < 260) {
@@ -4508,7 +4619,6 @@ function exportPDF() {
           });
         }
 
-        // rodapé final na última página
         doc.setFillColor(...cSurf);
         doc.roundedRect(mg, y + 4, W - mg * 2, 18, 2, 2, 'F');
         doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(...cAccent);
@@ -4533,6 +4643,9 @@ function exportPDF() {
   }, 100);
 }
 
+// ═══════════════════════════════════════
+//  EXPORT PPTX
+// ═══════════════════════════════════════
 function exportPPTX() {
   const overlay = document.getElementById('exportOverlay');
   document.getElementById('exportMsg').textContent = 'Gerando apresentacao PPTX...';
@@ -4559,6 +4672,43 @@ function exportPPTX() {
       const BG = '0A0D14', SURF = '0F1320', SURF2 = '151A2A', SURF3 = '1E2640';
       const ACCENT = '4F9CF9', GREEN = '34D399', RED = 'F87171', YELLOW = 'FBBF24', ORANGE = 'FB923C';
       const MUTED = '64748B', MUTED2 = '94A3B8', TEXT = 'E2E8F0', WHITE = 'FFFFFF';
+
+      // ── Determina o ano ativo ──
+      const anoAtivo = activeYear !== null ? +activeYear
+                     : (activeMonth >= 0 && MONTHS[activeMonth] ? +MONTHS[activeMonth].ano || null : null);
+
+      const mesesDoAno = anoAtivo !== null
+        ? MONTHS.filter(m => +m.ano === anoAtivo)
+        : MONTHS;
+
+      const anoAnterior = anoAtivo !== null ? anoAtivo - 1 : null;
+      const mesesAnoAnterior = anoAnterior !== null
+        ? MONTHS.filter(m => +m.ano === anoAnterior)
+        : [];
+
+      // ── Helper: faturamento real de um mês pela chave ──
+      const getFatReal = key => {
+        if (!key) return null;
+        const fat = parsedFaturamento[key];
+        if (fat === undefined || fat === null) return null;
+        return typeof fat === 'object' ? (fat.total || fat.valor || 0) : +fat;
+      };
+
+      // ── Verifica disponibilidade de faturamento real ──
+      const chavesMesesAtivo    = mesesDoAno.map(m => m.key).filter(Boolean);
+      const chavesMesesAnterior = mesesAnoAnterior.map(m => m.key).filter(Boolean);
+      const temFatAtivo    = chavesMesesAtivo.some(k => getFatReal(k) !== null);
+      const temFatAnterior = chavesMesesAnterior.length === 0 || chavesMesesAnterior.some(k => getFatReal(k) !== null);
+      // usaFatRealAmbos = true só se AMBOS os anos tiverem faturamento real
+      // (usado nos slides de comparativo entre anos)
+      const usaFatRealAmbos = temFatAtivo && temFatAnterior && mesesAnoAnterior.length > 0;
+
+      // ── Helper: receita de um mês (faturamento real se disponível, senão aprovado) ──
+      const getRecMes = (m, usaFat) => {
+        if (!usaFat) return m.geral.aprovado;
+        const fat = getFatReal(m.key);
+        return fat !== null ? fat : m.geral.aprovado;
+      };
 
       const se = s => {
         if (!s) return '';
@@ -4612,16 +4762,12 @@ function exportPPTX() {
         s.background = { color: BG };
         s.addShape(pptx.ShapeType.rect, { x: 0, y: 0, w: '100%', h: .08, fill: { color: ACCENT } });
         s.addShape(pptx.ShapeType.rect, { x: 0, y: 5.42, w: '100%', h: .08, fill: { color: SURF2 } });
-
-        // Bloco central SEM borda azul
         s.addShape(pptx.ShapeType.roundRect, {
           x: 1.2, y: .7, w: 7.6, h: 4.4,
           fill: { color: SURF },
           line: { color: SURF, pt: 0, transparency: 100 },
           rectRadius: .1
         });
-
-        // Nome da empresa maior
         s.addText(se(nomeEmpresa), {
           x: 1.4, y: 1.0, w: 7.2, h: .6,
           fontSize: 22, color: ACCENT, bold: true, fontFace: 'Calibri', align: 'center'
@@ -4638,23 +4784,17 @@ function exportPPTX() {
           x: 1.4, y: 2.9, w: 7.2, h: .28,
           fontSize: 12, color: MUTED2, italic: true, fontFace: 'Calibri', align: 'center'
         });
-
-        // Score
         const sc = M.score >= 80 ? GREEN : M.score >= 65 ? YELLOW : RED;
         s.addShape(pptx.ShapeType.roundRect, {
           x: 3.9, y: 3.35, w: 2.2, h: 1.0,
-          fill: { color: SURF2 },
-          line: { color: sc, pt: 2 },
-          rectRadius: .06
+          fill: { color: SURF2 }, line: { color: sc, pt: 2 }, rectRadius: .06
         });
         s.addText('Score de Saude', { x: 3.9, y: 3.42, w: 2.2, h: .22, fontSize: 9, color: MUTED, fontFace: 'Calibri', align: 'center' });
         s.addText(M.score + '/100', { x: 3.9, y: 3.65, w: 2.2, h: .4, fontSize: 20, bold: true, color: sc, fontFace: 'Calibri', align: 'center' });
         const sl = M.score >= 80 ? 'Saudavel' : M.score >= 65 ? 'Atencao' : M.score >= 50 ? 'Regular' : 'Critico';
         s.addText(sl, { x: 3.9, y: 4.07, w: 2.2, h: .2, fontSize: 10, bold: true, color: sc, fontFace: 'Calibri', align: 'center' });
-
         s.addText('Gerado em ' + new Date().toLocaleDateString('pt-BR'), {
-          x: 1.4, y: 4.95, w: 7.2, h: .22,
-          fontSize: 9, color: MUTED, fontFace: 'Calibri', align: 'center'
+          x: 1.4, y: 4.95, w: 7.2, h: .22, fontSize: 9, color: MUTED, fontFace: 'Calibri', align: 'center'
         });
       }
 
@@ -4663,608 +4803,631 @@ function exportPPTX() {
       // ════════════════════
       {
         const s = makeSlide('Diagnostico Executivo', 'Resumo do periodo e principais pontos de atencao');
+        const topDent = [...M.dentistas].sort((a, b)=> b.valor_aprovado - a.valor_aprovado)[0];
+const piorDent = [...M.dentistas].filter(d => d.total >= 5).sort((a, b) => a.taxa - b.taxa)[0];
+const totalVencVal = M.topVencidos.reduce((s2, v) => s2 + v.total, 0);
+const goalAtivo = getGoalForActivePeriod();
+const goalPct = goalAtivo > 0 ? +(g.aprovado / goalAtivo * 100).toFixed(1) : null;
+const resumoTxt = 'Receita aprovada: ' + se(fmtK(g.aprovado)) +
+  '   |   Taxa de conversao: ' + g.taxa + '%' +
+  '   |   Score de saude: ' + M.score + '/100';
+s.addText(resumoTxt, { x: .3, y: .88, w: 9.4, h: .38, fontSize: 13, bold: true, color: TEXT, fontFace: 'Calibri' });
+s.addShape(pptx.ShapeType.rect, { x: .3, y: 1.3, w: 9.4, h: .02, fill: { color: SURF2 } });
+const bullets = [];
+if (topDent) bullets.push({ icon: '\u2B50', txt: 'Melhor ' + se(vLabel) + ': ' + se(topDent.nome) + ' — ' + se(fmtK(topDent.valor_aprovado)) + ' faturados', color: YELLOW });
+if (piorDent && piorDent.taxa < (_benchmarks.conversaoCritica || 60)) {
+  bullets.push({ icon: '\u26A0', txt: 'Atencao: ' + se(piorDent.nome) + ' com apenas ' + piorDent.taxa + '% de conversao', color: YELLOW });
+} else if (piorDent) {
+  bullets.push({ icon: '\u26A0', txt: se(vLabel) + ' com menor conversao: ' + se(piorDent.nome) + ' (' + piorDent.taxa + '%)', color: MUTED2 });
+}
+if (totalVencVal > 0) bullets.push({ icon: '\uD83D\uDCB8', txt: se(fmtK(totalVencVal)) + ' em orcamentos vencidos — potencial de +' + se(fmtK(totalVencVal * .3)) + ' via follow-up', color: GREEN });
+if (g.cancelados > 0) bullets.push({ icon: '\uD83D\uDD34', txt: g.cancelados + ' ' + se(pLabel.toLowerCase()) + (g.cancelados > 1 ? 's' : '') + ' cancelado' + (g.cancelados > 1 ? 's' : '') + ' no periodo', color: RED });
+if (goalAtivo > 0 && goalPct !== null) {
+  const metaBatida = goalPct >= 100;
+  const corMeta = metaBatida ? GREEN : goalPct >= 75 ? YELLOW : RED;
+  const iconeMeta = metaBatida ? '\u2705' : '\uD83C\uDFAF';
+  const txMeta = metaBatida
+    ? 'Meta batida! ' + goalPct + '% atingido (' + se(fmtK(g.aprovado)) + ' de ' + se(fmtK(goalAtivo)) + ')'
+    : 'Meta: ' + goalPct + '% atingido — faltam ' + se(fmtK(goalAtivo - g.aprovado)) + ' para bater a meta';
+  bullets.push({ icon: iconeMeta, txt: txMeta, color: corMeta });
+}
+if (g.taxa >= (_benchmarks.conversaoIdeal || 75)) bullets.push({ icon: '\u2705', txt: 'Taxa de conversao acima da meta (' + (_benchmarks.conversaoIdeal || 75) + '%) — desempenho excelente', color: GREEN });
+bullets.slice(0, 5).forEach((b, i) => {
+  s.addText(b.icon + '  ' + b.txt, { x: .3, y: 1.42 + i * .62, w: 9.4, h: .52, fontSize: 13, color: b.color, fontFace: 'Calibri', bold: false });
+});
+}
 
-        const topDent = [...M.dentistas].sort((a, b) => b.valor_aprovado - a.valor_aprovado)[0];
-        const piorDent = [...M.dentistas].filter(d => d.total >= 5).sort((a, b) => a.taxa - b.taxa)[0];
-        const totalVencVal = M.topVencidos.reduce((s2, v) => s2 + v.total, 0);
+// ════════════════════
+//  SLIDE 3 — KPIs
+// ════════════════════
+{
+const s = makeSlide('KPIs — ' + se(M.periodo), 'Indicadores-chave do periodo');
+const ticketMedio = g.aprovados > 0 ? g.aprovado / g.aprovados : 0;
+const goalAtivo = getGoalForActivePeriod();
+const goalPct = goalAtivo > 0 ? Math.min(+(g.aprovado / goalAtivo * 100).toFixed(1), 999) : null;
+const kpis = [
+  { l: 'Taxa de Conversao', v: g.taxa + '%', s: g.aprovados + '/' + g.total + ' orcamentos', c: ACCENT },
+  { l: 'Receita Faturada', v: se(fmtK(g.aprovado)), s: 'de ' + se(fmtK(g.orcado)), c: GREEN },
+  { l: 'Receita Perdida', v: se(fmtK(g.perdido)), s: g.vencidos + ' vencidos', c: RED },
+  { l: 'Ticket Medio', v: se(fmtK(ticketMedio)), s: 'por aprovacao', c: YELLOW },
+  { l: goalPct !== null ? 'Meta Atingida' : 'Recuperavel', v: goalPct !== null ? goalPct + '%' : se(fmtK(g.perdido * .3)), s: goalPct !== null ? se(fmtK(g.aprovado)) + ' de ' + se(fmtK(goalAtivo)) : 'estimativa follow-up', c: goalPct !== null ? (goalPct >= 100 ? GREEN : goalPct >= 75 ? YELLOW : RED) : ORANGE },
+  { l: 'Score de Saude', v: M.score + '/100', s: M.score >= 80 ? 'Saudavel' : M.score >= 65 ? 'Atencao' : 'Critico', c: M.score >= 80 ? GREEN : M.score >= 65 ? YELLOW : RED },
+];
+kpis.forEach((k, i) => {
+  const col = i % 3, row = Math.floor(i / 3);
+  addKpiCard(s, .25 + col * 3.27, 1.0 + row * 2.18, 3.1, 1.9, k.l, k.v, k.s, k.c);
+});
+}
 
-        // Linha de resumo
-        const goalAtivo = getGoalForActivePeriod();
-        const goalPct = goalAtivo > 0 ? +(g.aprovado / goalAtivo * 100).toFixed(1) : null;
+// ════════════════════
+//  SLIDE 4 — GRÁFICO PERFORMANCE VENDEDORES
+// ════════════════════
+{
+const s = makeSlide('Performance por ' + se(vLabelP), 'Faturamento e conversao por ' + se(vLabel).toLowerCase());
+const dentSorted = [...M.dentistas].sort((a, b) => b.valor_aprovado - a.valor_aprovado).slice(0, 8);
+const chartData = [{ name: 'Faturamento', labels: dentSorted.map(d => se(d.nome)), values: dentSorted.map(d => +d.valor_aprovado.toFixed(0)) }];
+try {
+  s.addChart(pptx.ChartType.bar, chartData, {
+    x: .25, y: .9, w: 5.5, h: 4.3, barDir: 'bar', barGrouping: 'clustered',
+    chartColors: [ACCENT], showValue: true, dataLabelFontSize: 9, dataLabelColor: TEXT,
+    dataLabelFormatCode: '"R$"#,##0', catAxisLabelColor: TEXT, catAxisLabelFontSize: 9,
+    valAxisLabelColor: MUTED, valAxisLabelFontSize: 8, valAxisLineShow: false,
+    plotAreaBkgndColor: SURF, chartAreaBkgndColor: BG, legendPos: 'n', showLegend: false,
+    border: { pt: 0 }, valAxisFormatCode: '"R$"#,##0', valGridLine: { style: 'none' },
+  });
+} catch (e) { console.warn('Chart falhou', e); }
+s.addText('Conversao por ' + se(vLabel), { x: 6.0, y: .88, w: 3.7, h: .28, fontSize: 10, bold: true, color: ACCENT, fontFace: 'Calibri' });
+dentSorted.forEach((d, i) => {
+  const y = 1.22 + i * .46;
+  if (y > 5.2) return;
+  const cor = convHex(d.taxa);
+  s.addShape(pptx.ShapeType.roundRect, { x: 6.0, y, w: 3.7, h: .38, fill: { color: SURF }, line: { color: cor, pt: .8 }, rectRadius: .03 });
+  s.addText(se(d.nome).substring(0, 18), { x: 6.08, y: y + .06, w: 2.0, h: .26, fontSize: 9, color: TEXT, fontFace: 'Calibri' });
+  s.addText(d.taxa + '%', { x: 8.0, y: y + .06, w: 1.6, h: .26, fontSize: 11, bold: true, color: cor, fontFace: 'Calibri', align: 'right' });
+});
+}
 
-        // Linha de resumo
-        const resumoTxt = 'Receita aprovada: ' + se(fmtK(g.aprovado)) +
-          '   |   Taxa de conversao: ' + g.taxa + '%' +
-          '   |   Score de saude: ' + M.score + '/100';
-        s.addText(resumoTxt, {
-          x: .3, y: .88, w: 9.4, h: .38,
-          fontSize: 13, bold: true, color: TEXT, fontFace: 'Calibri'
-        });
+// ════════════════════
+//  SLIDE 5 — TABELA DETALHADA VENDEDORES
+// ════════════════════
+{
+const s = makeSlide('Ranking — ' + se(vLabelP), 'Detalhamento completo por ' + se(vLabel).toLowerCase());
+const dentSorted = [...M.dentistas].sort((a, b) => b.valor_aprovado - a.valor_aprovado).slice(0, 9);
+const rows = dentSorted.map((d, i) => {
+  const tc = convHex(d.taxa);
+  return [
+    { text: String(i + 1), options: { color: MUTED2, fontFace: 'Calibri', fontSize: 9 } },
+    { text: se(d.nome), options: { bold: true, color: TEXT, fontFace: 'Calibri', fontSize: 9 } },
+    { text: String(d.total), options: { color: MUTED2, fontFace: 'Calibri', align: 'center', fontSize: 9 } },
+    { text: d.taxa + '%', options: { bold: true, color: tc, fontFace: 'Calibri', align: 'center', fontSize: 9 } },
+    { text: se(fmtK(d.valor_aprovado)), options: { bold: true, color: GREEN, fontFace: 'Calibri', fontSize: 9 } },
+    { text: se(fmtK(d.ticket_medio)), options: { color: TEXT, fontFace: 'Calibri', fontSize: 9 } },
+    { text: d.tempo_medio + 'd', options: { color: d.tempo_medio > 5 ? YELLOW : MUTED2, fontFace: 'Calibri', align: 'center', fontSize: 9 } },
+    { text: String(d.cancelados), options: { color: d.cancelados > 2 ? ORANGE : MUTED2, fontFace: 'Calibri', align: 'center', fontSize: 9 } },
+    { text: se(fmtK(d.valor_perdido)), options: { color: RED, fontFace: 'Calibri', fontSize: 9 } },
+  ];
+});
+s.addTable([
+  [
+    { text: '#', options: { bold: true, color: ACCENT, fill: { color: SURF2 }, fontFace: 'Calibri', fontSize: 9 } },
+    { text: se(vLabel), options: { bold: true, color: ACCENT, fill: { color: SURF2 }, fontFace: 'Calibri', fontSize: 9 } },
+    { text: 'Orcam.', options: { bold: true, color: ACCENT, fill: { color: SURF2 }, fontFace: 'Calibri', align: 'center', fontSize: 9 } },
+    { text: 'Conv.', options: { bold: true, color: ACCENT, fill: { color: SURF2 }, fontFace: 'Calibri', align: 'center', fontSize: 9 } },
+    { text: 'Faturado', options: { bold: true, color: ACCENT, fill: { color: SURF2 }, fontFace: 'Calibri', fontSize: 9 } },
+    { text: 'Ticket', options: { bold: true, color: ACCENT, fill: { color: SURF2 }, fontFace: 'Calibri', fontSize: 9 } },
+    { text: 'Tempo', options: { bold: true, color: ACCENT, fill: { color: SURF2 }, fontFace: 'Calibri', align: 'center', fontSize: 9 } },
+    { text: 'Canc.', options: { bold: true, color: ACCENT, fill: { color: SURF2 }, fontFace: 'Calibri', align: 'center', fontSize: 9 } },
+    { text: 'Perdido', options: { bold: true, color: ACCENT, fill: { color: SURF2 }, fontFace: 'Calibri', fontSize: 9 } },
+  ],
+  ...rows
+], {
+  x: .2, y: .88, w: 9.6, colW: [.35, 1.75, .85, .85, 1.55, 1.35, .85, .75, 1.3],
+  border: { type: 'none' }, fill: { color: SURF }, fontFace: 'Calibri', fontSize: 9, rowH: .38, autoPage: false,
+});
+}
 
-        // Linha separadora
-        s.addShape(pptx.ShapeType.rect, {
-          x: .3, y: 1.3, w: 9.4, h: .02,
-          fill: { color: SURF2 }
-        });
+// ════════════════════
+//  SLIDE 6 — CANAIS
+// ════════════════════
+{
+const s = makeSlide('Canais de Marketing', 'Taxa de conversao e receita por canal');
+const canaisSorted = [...M.canais].sort((a, b) => b.valor - a.valor).slice(0, 7);
+const pieData = [{ name: 'Receita', labels: canaisSorted.map(c => se(canalDisplay(c.canal))), values: canaisSorted.map(c => +c.valor.toFixed(0)) }];
+const PIE_COLORS = ['4F9CF9', '34D399', 'FBBF24', 'F87171', 'A78BFA', 'FB923C', '38BDF8'];
+try {
+  s.addChart(pptx.ChartType.pie, pieData, {
+    x: .25, y: .88, w: 4.6, h: 4.4, chartColors: PIE_COLORS, showValue: false, showPercent: true,
+    dataLabelFontSize: 10, dataLabelColor: TEXT, legendPos: 'b', legendColor: MUTED2, legendFontSize: 9,
+    showLegend: true, plotAreaBkgndColor: BG, chartAreaBkgndColor: BG, border: { pt: 0 }, holeSize: 0,
+  });
+} catch (e) { console.warn('Pie chart falhou', e); }
+s.addText('Conversao por Canal', { x: 5.1, y: .88, w: 4.7, h: .28, fontSize: 11, bold: true, color: ACCENT, fontFace: 'Calibri' });
+canaisSorted.forEach((c, i) => {
+  const y = 1.22 + i * .54;
+  if (y > 5.1) return;
+  const cor = convHex(c.taxa);
+  const nom = se(canalDisplay(c.canal));
+  s.addText(nom.substring(0, 14), { x: 5.1, y: y + .04, w: 1.8, h: .3, fontSize: 9, color: MUTED2, fontFace: 'Calibri' });
+  const bx = 6.95, bw = 1.9;
+  s.addShape(pptx.ShapeType.roundRect, { x: bx, y: y + .06, w: bw, h: .24, fill: { color: SURF2 }, rectRadius: .03 });
+  s.addShape(pptx.ShapeType.roundRect, { x: bx, y: y + .06, w: Math.max(c.taxa / 100 * bw, .02), h: .24, fill: { color: cor }, rectRadius: .03 });
+  s.addText(c.taxa + '%', { x: 8.92, y: y + .04, w: .9, h: .3, fontSize: 10, bold: true, color: cor, fontFace: 'Calibri', align: 'right' });
+  s.addText(se(fmtK(c.valor)), { x: 5.1, y: y + .3, w: 4.7, h: .18, fontSize: 8, color: MUTED, fontFace: 'Calibri' });
+});
+}
 
-        // Bullets dinâmicos
-        const bullets = [];
-
-        if (topDent) {
-          bullets.push({
-            icon: '\u2B50',
-            txt: 'Melhor ' + se(vLabel) + ': ' + se(topDent.nome) + ' — ' + se(fmtK(topDent.valor_aprovado)) + ' faturados',
-            color: YELLOW
-          });
-        }
-
-        if (piorDent && piorDent.taxa < (_benchmarks.conversaoCritica || 60)) {
-          bullets.push({
-            icon: '\u26A0',
-            txt: 'Atencao: ' + se(piorDent.nome) + ' com apenas ' + piorDent.taxa + '% de conversao',
-            color: YELLOW
-          });
-        } else if (piorDent) {
-          bullets.push({
-            icon: '\u26A0',
-            txt: se(vLabel) + ' com menor conversao: ' + se(piorDent.nome) + ' (' + piorDent.taxa + '%)',
-            color: MUTED2
-          });
-        }
-
-        if (totalVencVal > 0) {
-          bullets.push({
-            icon: '\uD83D\uDCB8',
-            txt: se(fmtK(totalVencVal)) + ' em orcamentos vencidos — potencial de +' + se(fmtK(totalVencVal * .3)) + ' via follow-up',
-            color: GREEN
-          });
-        }
-
-        if (g.cancelados > 0) {
-          bullets.push({
-            icon: '\uD83D\uDD34',
-            txt: g.cancelados + ' ' + se(pLabel.toLowerCase()) + (g.cancelados > 1 ? 's' : '') + ' cancelado' + (g.cancelados > 1 ? 's' : '') + ' no periodo',
-            color: RED
-          });
-        }
-
-        if (goalAtivo > 0 && goalPct !== null) {
-          const metaBatida = goalPct >= 100;
-          const corMeta = metaBatida ? GREEN : goalPct >= 75 ? YELLOW : RED;
-          const iconeMeta = metaBatida ? '\u2705' : '\uD83C\uDFAF';
-          const txMeta = metaBatida
-            ? 'Meta batida! ' + goalPct + '% atingido (' + se(fmtK(g.aprovado)) + ' de ' + se(fmtK(goalAtivo)) + ')'
-            : 'Meta: ' + goalPct + '% atingido — faltam ' + se(fmtK(goalAtivo - g.aprovado)) + ' para bater a meta';
-          bullets.push({ icon: iconeMeta, txt: txMeta, color: corMeta });
-        }
-
-        if (g.taxa >= (_benchmarks.conversaoIdeal || 75)) {
-          bullets.push({
-            icon: '\u2705',
-            txt: 'Taxa de conversao acima da meta (' + (_benchmarks.conversaoIdeal || 75) + '%) — desempenho excelente',
-            color: GREEN
-          });
-        }
-
-        bullets.slice(0, 5).forEach((b, i) => {
-          const y = 1.42 + i * .62;
-          s.addText(b.icon + '  ' + b.txt, {
-            x: .3, y, w: 9.4, h: .52,
-            fontSize: 13, color: b.color, fontFace: 'Calibri', bold: false
-          });
-        });
-      }
-
-      // ════════════════════
-      //  SLIDE 3 — KPIs
-      // ════════════════════
-      {
-        const s = makeSlide('KPIs — ' + se(M.periodo), 'Indicadores-chave do periodo');
-        const ticketMedio = g.aprovados > 0 ? g.aprovado / g.aprovados : 0;
-        const goalAtivo = getGoalForActivePeriod();
-        const goalPct = goalAtivo > 0 ? Math.min(+(g.aprovado / goalAtivo * 100).toFixed(1), 999) : null;
-        const kpis = [
-          { l: 'Taxa de Conversao', v: g.taxa + '%', s: g.aprovados + '/' + g.total + ' orcamentos', c: ACCENT },
-          { l: 'Receita Faturada', v: se(fmtK(g.aprovado)), s: 'de ' + se(fmtK(g.orcado)), c: GREEN },
-          { l: 'Receita Perdida', v: se(fmtK(g.perdido)), s: g.vencidos + ' vencidos', c: RED },
-          { l: 'Ticket Medio', v: se(fmtK(ticketMedio)), s: 'por aprovacao', c: YELLOW },
-          { l: goalPct !== null ? 'Meta Atingida' : 'Recuperavel', v: goalPct !== null ? goalPct + '%' : se(fmtK(g.perdido * .3)), s: goalPct !== null ? se(fmtK(g.aprovado)) + ' de ' + se(fmtK(goalAtivo)) : 'estimativa follow-up', c: goalPct !== null ? (goalPct >= 100 ? GREEN : goalPct >= 75 ? YELLOW : RED) : ORANGE },
-          { l: 'Score de Saude', v: M.score + '/100', s: M.score >= 80 ? 'Saudavel' : M.score >= 65 ? 'Atencao' : 'Critico', c: M.score >= 80 ? GREEN : M.score >= 65 ? YELLOW : RED },
-        ];
-        kpis.forEach((k, i) => {
-          const col = i % 3, row = Math.floor(i / 3);
-          addKpiCard(s, .25 + col * 3.27, 1.0 + row * 2.18, 3.1, 1.9, k.l, k.v, k.s, k.c);
-        });
-      }
-
-      // ════════════════════
-      //  SLIDE 4 — GRÁFICO PERFORMANCE VENDEDORES
-      // ════════════════════
-      {
-        const s = makeSlide('Performance por ' + se(vLabelP), 'Faturamento e conversao por ' + se(vLabel).toLowerCase());
-        const dentSorted = [...M.dentistas].sort((a, b) => b.valor_aprovado - a.valor_aprovado).slice(0, 8);
-
-        const chartData = [{
-          name: 'Faturamento',
-          labels: dentSorted.map(d => se(d.nome)),
-          values: dentSorted.map(d => +d.valor_aprovado.toFixed(0)),
-        }];
-        try {
-          s.addChart(pptx.ChartType.bar, chartData, {
-            x: .25, y: .9, w: 5.5, h: 4.3,
-            barDir: 'bar',
-            barGrouping: 'clustered',
-            chartColors: [ACCENT],
-            showValue: true,
-            dataLabelFontSize: 9,
-            dataLabelColor: TEXT,
-            dataLabelFormatCode: '"R$"#,##0',
-            catAxisLabelColor: TEXT,
-            catAxisLabelFontSize: 9,
-            valAxisLabelColor: MUTED,
-            valAxisLabelFontSize: 8,
-            valAxisLineShow: false,
-            plotAreaBkgndColor: SURF,
-            chartAreaBkgndColor: BG,
-            legendPos: 'n',
-            showLegend: false,
-            border: { pt: 0 },
-            valAxisFormatCode: '"R$"#,##0',
-            valGridLine: { style: 'none' },
-          });
-        } catch (e) { console.warn('Chart falhou, usando barras manuais', e); }
-
-        s.addText('Conversao por ' + se(vLabel), { x: 6.0, y: .88, w: 3.7, h: .28, fontSize: 10, bold: true, color: ACCENT, fontFace: 'Calibri' });
-        dentSorted.forEach((d, i) => {
-          const y = 1.22 + i * .46;
-          if (y > 5.2) return;
-          const cor = convHex(d.taxa);
-          s.addShape(pptx.ShapeType.roundRect, { x: 6.0, y, w: 3.7, h: .38, fill: { color: SURF }, line: { color: cor, pt: .8 }, rectRadius: .03 });
-          s.addText(se(d.nome).substring(0, 18), { x: 6.08, y: y + .06, w: 2.0, h: .26, fontSize: 9, color: TEXT, fontFace: 'Calibri' });
-          s.addText(d.taxa + '%', { x: 8.0, y: y + .06, w: 1.6, h: .26, fontSize: 11, bold: true, color: cor, fontFace: 'Calibri', align: 'right' });
-        });
-      }
-
-      // ════════════════════
-      //  SLIDE 5 — TABELA DETALHADA VENDEDORES
-      // ════════════════════
-      {
-        const s = makeSlide('Ranking — ' + se(vLabelP), 'Detalhamento completo por ' + se(vLabel).toLowerCase());
-        const dentSorted = [...M.dentistas].sort((a, b) => b.valor_aprovado - a.valor_aprovado).slice(0, 9);
-        const rows = dentSorted.map((d, i) => {
-          const tc = convHex(d.taxa);
-          return [
-            { text: String(i + 1), options: { color: MUTED2, fontFace: 'Calibri', fontSize: 9 } },
-            { text: se(d.nome), options: { bold: true, color: TEXT, fontFace: 'Calibri', fontSize: 9 } },
-            { text: String(d.total), options: { color: MUTED2, fontFace: 'Calibri', align: 'center', fontSize: 9 } },
-            { text: d.taxa + '%', options: { bold: true, color: tc, fontFace: 'Calibri', align: 'center', fontSize: 9 } },
-            { text: se(fmtK(d.valor_aprovado)), options: { bold: true, color: GREEN, fontFace: 'Calibri', fontSize: 9 } },
-            { text: se(fmtK(d.ticket_medio)), options: { color: TEXT, fontFace: 'Calibri', fontSize: 9 } },
-            { text: d.tempo_medio + 'd', options: { color: d.tempo_medio > 5 ? YELLOW : MUTED2, fontFace: 'Calibri', align: 'center', fontSize: 9 } },
-            { text: String(d.cancelados), options: { color: d.cancelados > 2 ? ORANGE : MUTED2, fontFace: 'Calibri', align: 'center', fontSize: 9 } },
-            { text: se(fmtK(d.valor_perdido)), options: { color: RED, fontFace: 'Calibri', fontSize: 9 } },
-          ];
-        });
-        s.addTable([
-          [
-            { text: '#', options: { bold: true, color: ACCENT, fill: { color: SURF2 }, fontFace: 'Calibri', fontSize: 9 } },
-            { text: se(vLabel), options: { bold: true, color: ACCENT, fill: { color: SURF2 }, fontFace: 'Calibri', fontSize: 9 } },
-            { text: 'Orcam.', options: { bold: true, color: ACCENT, fill: { color: SURF2 }, fontFace: 'Calibri', align: 'center', fontSize: 9 } },
-            { text: 'Conv.', options: { bold: true, color: ACCENT, fill: { color: SURF2 }, fontFace: 'Calibri', align: 'center', fontSize: 9 } },
-            { text: 'Faturado', options: { bold: true, color: ACCENT, fill: { color: SURF2 }, fontFace: 'Calibri', fontSize: 9 } },
-            { text: 'Ticket', options: { bold: true, color: ACCENT, fill: { color: SURF2 }, fontFace: 'Calibri', fontSize: 9 } },
-            { text: 'Tempo', options: { bold: true, color: ACCENT, fill: { color: SURF2 }, fontFace: 'Calibri', align: 'center', fontSize: 9 } },
-            { text: 'Canc.', options: { bold: true, color: ACCENT, fill: { color: SURF2 }, fontFace: 'Calibri', align: 'center', fontSize: 9 } },
-            { text: 'Perdido', options: { bold: true, color: ACCENT, fill: { color: SURF2 }, fontFace: 'Calibri', fontSize: 9 } },
-          ],
-          ...rows
-        ], {
-          x: .2, y: .88, w: 9.6,
-          colW: [.35, 1.75, .85, .85, 1.55, 1.35, .85, .75, 1.3],
-          border: { type: 'none' },
-          fill: { color: SURF },
-          fontFace: 'Calibri',
-          fontSize: 9,
-          rowH: .38,
-          autoPage: false,
-        });
-      }
+// ════════════════════
+//  SLIDE 7 — EVOLUÇÃO MENSAL
+//  Usa faturamento real se o ano ativo tiver planilha
+// ════════════════════
+if (mesesDoAno.length >= 2) {
+const s = makeSlide('Evolucao Mensal', 'Comparativo de receita e conversao ao longo dos meses');
+const fonteSlide7 = temFatAtivo ? 'faturamento real' : 'orcamentos aprovados';
+const valoresSlide7 = mesesDoAno.map(m => {
+  const fat = getFatReal(m.key);
+  return temFatAtivo && fat !== null ? +fat.toFixed(0) : +m.geral.aprovado.toFixed(0);
+});
+const chartData = [{
+  name: 'Receita',
+  labels: mesesDoAno.map(m => se(m.periodo)),
+  values: valoresSlide7,
+}];
+try {
+  s.addChart(pptx.ChartType.bar, chartData, {
+    x: .25, y: .88, w: 9.5, h: 3.8, barDir: 'col', barGrouping: 'clustered',
+    chartColors: [ACCENT], showValue: true, dataLabelFontSize: 9, dataLabelColor: TEXT,
+    dataLabelFormatCode: '[>=10000]#,##0,"k";[<=-10000]-#,##0,"k";0',
+    catAxisLabelColor: MUTED2, catAxisLabelFontSize: 8, valAxisLabelColor: MUTED, valAxisLabelFontSize: 8,
+    valAxisLineShow: false, plotAreaBkgndColor: SURF, chartAreaBkgndColor: BG,
+    legendPos: 'n', showLegend: false, border: { pt: 0 },
+    valAxisFormatCode: '[>=10000]#,##0,"k";[<=-10000]-#,##0,"k";0',
+    valGridLine: { color: SURF2, pt: .5 },
+  });
+} catch (e) { console.warn('Bar chart evolucao falhou', e); }
+const colW = 9.5 / mesesDoAno.length;
+mesesDoAno.forEach((m, i) => {
+  const x = .25 + i * colW;
+  const cor = convHex(m.geral.taxa);
+  s.addText(m.geral.taxa + '% conv.', {
+    x, y: 4.74, w: colW, h: .28, fontSize: 8, bold: true, color: cor, fontFace: 'Calibri', align: 'center'
+  });
+});
+// Nota da fonte
+s.addText('Fonte: ' + fonteSlide7, {
+  x: .25, y: 5.22, w: 9.5, h: .15, fontSize: 7, color: MUTED, fontFace: 'Calibri', italic: true
+});
+}
 
       // ════════════════════
-      //  SLIDE 6 — CANAIS
-      // ════════════════════
-      {
-        const s = makeSlide('Canais de Marketing', 'Taxa de conversao e receita por canal');
-        const canaisSorted = [...M.canais].sort((a, b) => b.valor - a.valor).slice(0, 7);
-
-        const pieData = [{
-          name: 'Receita',
-          labels: canaisSorted.map(c => se(canalDisplay(c.canal))),
-          values: canaisSorted.map(c => +c.valor.toFixed(0)),
-        }];
-        const PIE_COLORS = ['4F9CF9', '34D399', 'FBBF24', 'F87171', 'A78BFA', 'FB923C', '38BDF8'];
-        try {
-          s.addChart(pptx.ChartType.pie, pieData, {
-            x: .25, y: .88, w: 4.6, h: 4.4,
-            chartColors: PIE_COLORS,
-            showValue: false,
-            showPercent: true,
-            dataLabelFontSize: 10,
-            dataLabelColor: TEXT,
-            legendPos: 'b',
-            legendColor: MUTED2,
-            legendFontSize: 9,
-            showLegend: true,
-            plotAreaBkgndColor: BG,
-            chartAreaBkgndColor: BG,
-            border: { pt: 0 },
-            holeSize: 0,
-          });
-        } catch (e) { console.warn('Pie chart falhou', e); }
-
-        s.addText('Conversao por Canal', { x: 5.1, y: .88, w: 4.7, h: .28, fontSize: 11, bold: true, color: ACCENT, fontFace: 'Calibri' });
-        canaisSorted.forEach((c, i) => {
-          const y = 1.22 + i * .54;
-          if (y > 5.1) return;
-          const cor = convHex(c.taxa);
-          const nom = se(canalDisplay(c.canal));
-          s.addText(nom.substring(0, 14), { x: 5.1, y: y + .04, w: 1.8, h: .3, fontSize: 9, color: MUTED2, fontFace: 'Calibri' });
-          const bx = 6.95, bw = 1.9;
-          s.addShape(pptx.ShapeType.roundRect, { x: bx, y: y + .06, w: bw, h: .24, fill: { color: SURF2 }, rectRadius: .03 });
-          s.addShape(pptx.ShapeType.roundRect, { x: bx, y: y + .06, w: Math.max(c.taxa / 100 * bw, .02), h: .24, fill: { color: cor }, rectRadius: .03 });
-          s.addText(c.taxa + '%', { x: 8.92, y: y + .04, w: .9, h: .3, fontSize: 10, bold: true, color: cor, fontFace: 'Calibri', align: 'right' });
-          s.addText(se(fmtK(c.valor)), { x: 5.1, y: y + .3, w: 4.7, h: .18, fontSize: 8, color: MUTED, fontFace: 'Calibri' });
-        });
-      }
-
-      // ════════════════════
-      //  SLIDE 7 — EVOLUÇÃO MENSAL
-      // ════════════════════
-      if (MONTHS.length >= 2) {
-        const s = makeSlide('Evolucao Mensal', 'Comparativo de receita e conversao ao longo dos meses');
-        const allMonths = MONTHS.slice(-12);
-
-        const chartData = [{
-          name: 'Receita',
-          labels: allMonths.map(m => se(m.periodo)),
-          values: allMonths.map(m => +m.geral.aprovado.toFixed(0)),
-        }];
-
-        try {
-          s.addChart(pptx.ChartType.bar, chartData, {
-            x: .25, y: .88, w: 9.5, h: 3.8,
-            barDir: 'col',
-            barGrouping: 'clustered',
-            chartColors: [ACCENT],
-            showValue: true,
-            dataLabelFontSize: 9,
-            dataLabelColor: TEXT,
-            dataLabelFormatCode: '"R$"#,##0',
-            catAxisLabelColor: MUTED2,
-            catAxisLabelFontSize: 8,
-            valAxisLabelColor: MUTED,
-            valAxisLabelFontSize: 8,
-            valAxisLineShow: false,
-            plotAreaBkgndColor: SURF,
-            chartAreaBkgndColor: BG,
-            legendPos: 'n',
-            showLegend: false,
-            border: { pt: 0 },
-            valAxisFormatCode: '"R$"#,##0',
-            valGridLine: { color: SURF2, pt: .5 },
-          });
-        } catch (e) { console.warn('Bar chart evolucao falhou', e); }
-
-        // Taxa de conversão embaixo de cada barra
-        const colW = 9.5 / allMonths.length;
-        allMonths.forEach((m, i) => {
-          const x = .25 + i * colW;
-          const cor = convHex(m.geral.taxa);
-          s.addText(m.geral.taxa + '% conv.', {
-            x, y: 4.74, w: colW, h: .28,
-            fontSize: 8, bold: true, color: cor,
-            fontFace: 'Calibri', align: 'center'
-          });
-        });
-      }
-
-      // ════════════════════
-      //  SLIDE 8 — COMPARATIVO MÊS ANTERIOR
+      //  SLIDE 8 — COMPARATIVO ANUAL
+      //  Receita: usa faturamento real se AMBOS os anos tiverem planilha
       // ════════════════════
       if (prev_) {
         const s = makeSlide('Comparativo — ' + se(M.periodo) + ' vs ' + se(prev_.periodo), 'Evolucao periodo a periodo');
         const ticketMedio = g.aprovados > 0 ? g.aprovado / g.aprovados : 0;
-        const ticketPrev = prev_.geral.aprovados > 0 ? prev_.geral.aprovado / prev_.geral.aprovados : 0;
+        const ticketPrev  = prev_.geral.aprovados > 0 ? prev_.geral.aprovado / prev_.geral.aprovados : 0;
+
+        // ── Receita atual: faturamento real se disponível, senão aprovado ──
+        let recAtual = g.aprovado;
+        if (temFatAtivo) {
+          const fatRealAtivo = mesesDoAno.reduce((acc, m) => {
+            const fat = getFatReal(m.key);
+            return fat !== null ? acc + fat : acc + m.geral.aprovado;
+          }, 0);
+          recAtual = fatRealAtivo;
+        }
+
+        // ── Valores do período anterior ──
+        let prevReceita    = prev_.geral.aprovado;
+        let prevPerdido    = prev_.geral.perdido;
+        let prevTaxa       = prev_.geral.taxa;
+        let prevTicket     = ticketPrev;
+        let prevCancelados = prev_.geral.cancelados;
+
+        if (anoAtivo !== null && mesesAnoAnterior.length > 0) {
+          const mesesAtivosIdx = mesesDoAno.map(m => +m.mes);
+          const mesesAntEquiv  = mesesAnoAnterior.filter(m => mesesAtivosIdx.includes(+m.mes));
+          if (mesesAntEquiv.length > 0) {
+            // Receita anterior: faturamento real se ambos tiverem, senão aprovado
+            prevReceita = usaFatRealAmbos
+              ? mesesAntEquiv.reduce((acc, m) => {
+                  const fat = getFatReal(m.key);
+                  return fat !== null ? acc + fat : acc + m.geral.aprovado;
+                }, 0)
+              : mesesAntEquiv.reduce((a, m) => a + m.geral.aprovado, 0);
+
+            prevPerdido    = mesesAntEquiv.reduce((a, m) => a + m.geral.perdido,    0);
+            prevCancelados = mesesAntEquiv.reduce((a, m) => a + m.geral.cancelados, 0);
+            const totAnt   = mesesAntEquiv.reduce((a, m) => a + m.geral.total,      0);
+            const aprvAnt  = mesesAntEquiv.reduce((a, m) => a + m.geral.aprovados,  0);
+            prevTaxa       = totAnt  > 0 ? +(aprvAnt / totAnt * 100).toFixed(1) : 0;
+            prevTicket     = aprvAnt > 0 ? prevReceita / aprvAnt : 0;
+          }
+        }
+
         const compItens = [
-          { l: 'Receita', curr: se(fmtK(g.aprovado)), prev: se(fmtK(prev_.geral.aprovado)), diff: g.aprovado - prev_.geral.aprovado, base: prev_.geral.aprovado },
-          { l: 'Conversao', curr: g.taxa + '%', prev: prev_.geral.taxa + '%', diff: g.taxa - prev_.geral.taxa, base: prev_.geral.taxa },
-          { l: 'Ticket Medio', curr: se(fmtK(ticketMedio)), prev: se(fmtK(ticketPrev)), diff: ticketMedio - ticketPrev, base: ticketPrev },
-          { l: 'Perdido', curr: se(fmtK(g.perdido)), prev: se(fmtK(prev_.geral.perdido)), diff: g.perdido - prev_.geral.perdido, base: prev_.geral.perdido, inv: true },
-          { l: 'Score', curr: M.score + '/100', prev: prev_.score + '/100', diff: M.score - prev_.score, base: prev_.score },
-          { l: 'Cancelamentos', curr: String(g.cancelados), prev: String(prev_.geral.cancelados), diff: g.cancelados - prev_.geral.cancelados, base: prev_.geral.cancelados, inv: true },
+          { l: 'Receita',       curr: se(fmtK(recAtual)),     prev: se(fmtK(prevReceita)),   diff: recAtual - prevReceita,        base: prevReceita    },
+          { l: 'Conversao',     curr: g.taxa + '%',            prev: prevTaxa + '%',          diff: g.taxa - prevTaxa,             base: prevTaxa       },
+          { l: 'Ticket Medio',  curr: se(fmtK(ticketMedio)),  prev: se(fmtK(prevTicket)),    diff: ticketMedio - prevTicket,      base: prevTicket     },
+          { l: 'Perdido',       curr: se(fmtK(g.perdido)),    prev: se(fmtK(prevPerdido)),   diff: g.perdido - prevPerdido,       base: prevPerdido,   inv: true },
+          { l: 'Score',         curr: M.score + '/100',        prev: prev_.score + '/100',    diff: M.score - prev_.score,         base: prev_.score    },
+          { l: 'Cancelamentos', curr: String(g.cancelados),   prev: String(prevCancelados),  diff: g.cancelados - prevCancelados, base: prevCancelados, inv: true },
         ];
+
         compItens.forEach((ci, i) => {
           const col = i % 3, row = Math.floor(i / 3);
           const x = .25 + col * 3.27, y = 1.0 + row * 2.2;
           const pctD = ci.base !== 0 ? (Math.abs(ci.diff) / Math.abs(ci.base) * 100) : 0;
-          const up = ci.inv ? ci.diff < 0 : ci.diff > 0;
-          const cor = Math.abs(ci.diff) < 0.01 ? MUTED : up ? GREEN : RED;
+          const up   = ci.inv ? ci.diff < 0 : ci.diff > 0;
+          const cor  = Math.abs(ci.diff) < 0.01 ? MUTED : up ? GREEN : RED;
           s.addShape(pptx.ShapeType.roundRect, { x, y, w: 3.1, h: 2.0, fill: { color: SURF }, line: { color: cor, pt: 1 }, rectRadius: .05 });
-          s.addShape(pptx.ShapeType.rect, { x, y, w: 3.1, h: .06, fill: { color: cor } });
-          s.addText(se(ci.l), { x, y: y + .12, w: 3.1, h: .26, fontSize: 9, bold: true, color: MUTED, fontFace: 'Calibri', align: 'center' });
-          s.addText(se(ci.curr), { x, y: y + .42, w: 3.1, h: .58, fontSize: 22, bold: true, color: cor, fontFace: 'Calibri', align: 'center' });
+          s.addShape(pptx.ShapeType.rect,      { x, y, w: 3.1, h: .06, fill: { color: cor } });
+          s.addText(se(ci.l),    { x, y: y + .12, w: 3.1, h: .26, fontSize: 9,  bold: true, color: MUTED,  fontFace: 'Calibri', align: 'center' });
+          s.addText(se(ci.curr), { x, y: y + .42, w: 3.1, h: .58, fontSize: 22, bold: true, color: cor,    fontFace: 'Calibri', align: 'center' });
           s.addText('antes: ' + se(ci.prev), { x, y: y + 1.05, w: 3.1, h: .26, fontSize: 9, color: MUTED2, fontFace: 'Calibri', align: 'center' });
           const arrow = Math.abs(pctD) < 0.5 ? '= igual' : (up ? '+ ' : '- ') + pctD.toFixed(1) + '%';
           s.addText(arrow, { x, y: y + 1.35, w: 3.1, h: .35, fontSize: 13, bold: true, color: cor, fontFace: 'Calibri', align: 'center' });
         });
-      }
 
-           // ════════════════════
-      //  SLIDE 9A — FINANCEIRO KPIs + GRÁFICO
-      // ════════════════════
-      if (temDespesas) {
-        // Base de cálculo — todos os meses com despesa
-        const mesesFin = MONTHS.filter(m => m.geral.hasDespesas || parsedExpenses[m.key]);
-        const fatFin   = mesesFin.reduce((a, m) => a + m.geral.aprovado, 0) || g.aprovado;
-        const despFin  = mesesFin.reduce((a, m) => a + m.geral.despesas, 0) || g.despesas;
-        const lucroFin = fatFin - despFin;
-        const margemFin = fatFin > 0 ? +((lucroFin / fatFin) * 100).toFixed(1) : 0;
-        const ratioFin  = fatFin > 0 ? +((despFin / fatFin) * 100).toFixed(1) : 0;
-        const marColor  = margemFin >= (_benchmarks.margemIdeal || 20) ? GREEN
-                        : margemFin >= (_benchmarks.margemBaixa || 10) ? YELLOW
-                        : margemFin >= 0 ? ORANGE : RED;
-
-        // Formata número abreviado para labels do gráfico
-        const fmtGraf = v => {
-          const n = Math.round(v);
-          if (Math.abs(n) >= 10000) return (Math.round(n / 1000)) + 'k';
-          return String(n);
-        };
-
-        // ── SLIDE 9A ──
-        {
-          const s = makeSlide('Analise Financeira — ' + se(M.periodo), 'Receita, despesas, lucro e margem liquida');
-
-          // 4 KPI cards
-          const kpiCards = [
-            { l: 'Receita Total',   v: se(fmtK(fatFin)),   s: 'faturamento aprovado',                                                        c: GREEN  },
-            { l: 'Despesas Totais', v: se(fmtK(despFin)),  s: ratioFin + '% da receita',                                                     c: RED    },
-            { l: 'Lucro Liquido',   v: se(fmtK(lucroFin)), s: lucroFin >= 0 ? 'resultado positivo' : 'resultado negativo',                   c: lucroFin >= 0 ? GREEN : RED },
-            { l: 'Margem Liquida',  v: margemFin + '%',    s: margemFin >= 20 ? 'excelente' : margemFin >= 10 ? 'saudavel' : margemFin >= 0 ? 'baixa' : 'negativa', c: marColor },
-          ];
-          kpiCards.forEach((k, i) => {
-            const x = .25 + i * 2.42;
-            s.addShape(pptx.ShapeType.roundRect, { x, y: .85, w: 2.3, h: 1.1, fill: { color: SURF }, line: { color: k.c, pt: 1 }, rectRadius: .05 });
-            s.addShape(pptx.ShapeType.rect,      { x, y: .85, w: 2.3, h: .05, fill: { color: k.c } });
-            s.addText(se(k.l), { x, y: .92,  w: 2.3, h: .2,  fontSize: 8,   bold: true, color: MUTED,  fontFace: 'Calibri', align: 'center' });
-            s.addText(se(k.v), { x, y: 1.14, w: 2.3, h: .42, fontSize: 17,  bold: true, color: k.c,    fontFace: 'Calibri', align: 'center' });
-            s.addText(se(k.s), { x, y: 1.58, w: 2.3, h: .18, fontSize: 7.5,             color: MUTED2, fontFace: 'Calibri', align: 'center' });
-          });
-
-          // Gráfico expandido com labels abreviadas
-          if (mesesFin.length > 0) {
-            // Monta labels customizadas para exibir sobre as barras
-            const labelsGraf = mesesFin.map(m => se(m.periodo));
-            const recValues  = mesesFin.map(m => +m.geral.aprovado.toFixed(0));
-            const despValues = mesesFin.map(m => +m.geral.despesas.toFixed(0));
-            const lucValues  = mesesFin.map(m => +(m.geral.aprovado - m.geral.despesas).toFixed(0));
-
-            const barData = [
-              { name: 'Receita',  labels: labelsGraf, values: recValues  },
-              { name: 'Despesas', labels: labelsGraf, values: despValues },
-              { name: 'Lucro',    labels: labelsGraf, values: lucValues  },
-            ];
-            try {
-              s.addChart(pptx.ChartType.bar, barData, {
-                x: .25, y: 2.05, w: 9.5, h: 3.2,
-                barDir: 'col',
-                barGrouping: 'clustered',
-                chartColors: [GREEN, RED, ACCENT],
-                showValue: true,
-                dataLabelFontSize: 7,
-                dataLabelColor: TEXT,
-                // Formato curto nativo — usa formato #,##0,, que divide por milhão;
-                // como pptxgenjs aceita dataLabelFormatCode, usamos formato personalizado
-                // que abrevia em K automaticamente via formatCode
-                dataLabelFormatCode: '[>=10000]#,##0,"k";[<=-10000]-#,##0,"k";0',
-                catAxisLabelColor: MUTED2,
-                catAxisLabelFontSize: 7,
-                valAxisLabelColor: MUTED,
-                valAxisLabelFontSize: 7,
-                valAxisLineShow: false,
-                valAxisFormatCode: '[>=10000]#,##0,"k";[<=-10000]-#,##0,"k";0',
-                plotAreaBkgndColor: SURF,
-                chartAreaBkgndColor: BG,
-                legendPos: 'b',
-                legendColor: MUTED2,
-                legendFontSize: 8,
-                showLegend: true,
-                border: { pt: 0 },
-                valGridLine: { color: SURF2, pt: .5 },
-              });
-            } catch (e) { console.warn('Bar chart financeiro falhou', e); }
-          }
-        }
-
-        // ── SLIDE 9B — RESUMO MENSAL COMPLETO ──
-        {
-          const s = makeSlide('Resumo Mensal Financeiro — ' + se(M.periodo), 'Detalhamento mes a mes: receita, despesas, lucro e margem');
-
-          // Insight financeiro — canto superior direito
-          const insFinanceiros = generateFinancialInsights(mesesFin.length > 0 ? mesesFin : [M]);
-          if (insFinanceiros.length > 0) {
-            const ins = insFinanceiros[0];
-            const cor = ins.t === 'a' ? RED : ins.t === 'w' ? YELLOW : ins.t === 'g' ? GREEN : ACCENT;
-            s.addShape(pptx.ShapeType.roundRect, { x: 6.6, y: .82, w: 3.1, h: 1.0, fill: { color: SURF }, line: { color: cor, pt: 1 }, rectRadius: .04 });
-            s.addShape(pptx.ShapeType.rect,      { x: 6.6, y: .82, w: .06, h: 1.0, fill: { color: cor } });
-            s.addText(se(ins.l),                     { x: 6.72, y: .88,  w: 2.9, h: .24, fontSize: 9,  bold: true, color: cor,  fontFace: 'Calibri' });
-            s.addText(se(ins.txt).substring(0, 100), { x: 6.72, y: 1.14, w: 2.9, h: .6,  fontSize: 8,              color: TEXT, fontFace: 'Calibri', wrap: true });
-          }
-
-          // Tabela compacta com todos os meses — fonte menor para caber tudo
-          const rowH = mesesFin.length <= 8 ? .38 : mesesFin.length <= 12 ? .32 : .27;
-          const fszTab = mesesFin.length <= 8 ? 9 : mesesFin.length <= 12 ? 8 : 7;
-
-          s.addTable([
-            [
-              { text: 'Mes',      options: { bold: true, color: ACCENT, fill: { color: SURF2 }, fontFace: 'Calibri', fontSize: fszTab } },
-              { text: 'Receita',  options: { bold: true, color: ACCENT, fill: { color: SURF2 }, fontFace: 'Calibri', fontSize: fszTab } },
-              { text: 'Despesas', options: { bold: true, color: ACCENT, fill: { color: SURF2 }, fontFace: 'Calibri', fontSize: fszTab } },
-              { text: 'Lucro',    options: { bold: true, color: ACCENT, fill: { color: SURF2 }, fontFace: 'Calibri', fontSize: fszTab } },
-              { text: 'Margem',   options: { bold: true, color: ACCENT, fill: { color: SURF2 }, fontFace: 'Calibri', align: 'center', fontSize: fszTab } },
-            ],
-            ...mesesFin.map(m => {
-              const ml = m.geral.aprovado - m.geral.despesas;
-              const mm = m.geral.aprovado > 0 ? +((ml / m.geral.aprovado) * 100).toFixed(1) : 0;
-              const mc = mm >= 20 ? GREEN : mm >= 10 ? YELLOW : mm >= 0 ? ORANGE : RED;
-              return [
-                { text: se(m.periodo),               options: { color: TEXT,                   fontFace: 'Calibri', fontSize: fszTab } },
-                { text: se(fmtK(m.geral.aprovado)),  options: { color: GREEN,    bold: true,   fontFace: 'Calibri', fontSize: fszTab } },
-                { text: se(fmtK(m.geral.despesas)),  options: { color: RED,      bold: true,   fontFace: 'Calibri', fontSize: fszTab } },
-                { text: se(fmtK(ml)),                options: { color: ml >= 0 ? GREEN : RED, bold: true, fontFace: 'Calibri', fontSize: fszTab } },
-                { text: mm + '%',                    options: { color: mc,       bold: true,   fontFace: 'Calibri', align: 'center', fontSize: fszTab } },
-              ];
-            })
-          ], {
-            x: .25, y: .88, w: 6.2,
-            colW: [1.9, 1.15, 1.15, 1.15, .85],
-            border: { type: 'none' },
-            fill: { color: SURF },
-            fontFace: 'Calibri',
-            fontSize: fszTab,
-            rowH: rowH,
-            autoPage: false,
-          });
-        }
-      }
-
-      // ════════════════════
-      //  SLIDE 10 — OPORTUNIDADES A RECUPERAR
-      // ════════════════════
-      {
-        const s = makeSlide('Oportunidades a Recuperar', se(pLabelP) + ' vencidos — follow-up imediato');
-        const top = M.topVencidos.slice(0, 7);
-        const tv = top.reduce((a, v) => a + v.total, 0);
-        s.addText('Total em risco: ' + se(fmtK(tv)) + '   |   Recuperavel via follow-up (30%): ' + se(fmtK(tv * .3)), {
-          x: .3, y: .88, w: 9.4, h: .28, fontSize: 11, color: YELLOW, bold: true, fontFace: 'Calibri'
-        });
-        if (top.length > 0) {
-          s.addTable([
-            [
-              { text: se(cLabel), options: { bold: true, color: ACCENT, fill: { color: SURF2 }, fontFace: 'Calibri' } },
-              { text: se(vLabel), options: { bold: true, color: ACCENT, fill: { color: SURF2 }, fontFace: 'Calibri' } },
-              { text: 'Canal', options: { bold: true, color: ACCENT, fill: { color: SURF2 }, fontFace: 'Calibri' } },
-              { text: 'Valor', options: { bold: true, color: ACCENT, fill: { color: SURF2 }, fontFace: 'Calibri' } },
-              { text: 'Telefone', options: { bold: true, color: ACCENT, fill: { color: SURF2 }, fontFace: 'Calibri' } },
-              { text: 'Dias Parado', options: { bold: true, color: ACCENT, fill: { color: SURF2 }, fontFace: 'Calibri', align: 'center' } },
-            ],
-            ...top.map(v => {
-              const dias = v.emissao ? Math.floor((Date.now() - v.emissao.getTime()) / 86400000) : null;
-              const corDias = dias === null ? MUTED : dias >= 60 ? RED : dias >= 30 ? YELLOW : MUTED2;
-              return [
-                { text: se(v.paciente || '—'), options: { color: TEXT, fontFace: 'Calibri' } },
-                { text: se(v.dentista || '—'), options: { color: MUTED2, fontFace: 'Calibri' } },
-                { text: se(canalDisplay(v.campanha || '')), options: { color: MUTED2, fontFace: 'Calibri' } },
-                { text: se(fmtK(v.total)), options: { color: RED, bold: true, fontFace: 'Calibri' } },
-                { text: se(v.telefone || '—'), options: { color: ACCENT, fontFace: 'Calibri' } },
-                { text: dias !== null ? String(dias) + 'd' : '—', options: { color: corDias, bold: dias !== null && dias >= 30, fontFace: 'Calibri', align: 'center' } },
-              ];
-            })
-          ], {
-            x: .25, y: 1.22, w: 9.5,
-            colW: [2.3, 1.5, 1.4, 1.5, 2.0, 1.0],
-            border: { type: 'none' },
-            fill: { color: SURF },
-            fontFace: 'Calibri',
-            fontSize: 10,
-            rowH: .44,
-            autoPage: false,
-          });
-        } else {
-          s.addText('Nenhum vencido encontrado neste periodo.', { x: .3, y: 1.5, w: 9.4, h: .4, fontSize: 13, color: MUTED, italic: true, fontFace: 'Calibri' });
-        }
-      }
-
-      // ════════════════════
-      //  SLIDE 11 — ALERTAS
-      // ════════════════════
-      {
-        const insights = generateInsights(M);
-        insights.sort((a, b) => ({ 'a': 0, 'o': 1, 'w': 2, 'i': 3, 'g': 4 }[a.t] || 9) - ({ 'a': 0, 'o': 1, 'w': 2, 'i': 3, 'g': 4 }[b.t] || 9));
-        for (let ci = 0; ci < insights.length; ci += 6) {
-          const chunk = insights.slice(ci, ci + 6);
-          const s = makeSlide('Alertas & Analise Inteligente' + (ci > 0 ? ' (cont.)' : ''), 'Gerados automaticamente a partir dos dados');
-          chunk.forEach((ins, i) => {
-            const col = i % 2, row = Math.floor(i / 2);
-            const x = .25 + col * 4.9, y = 1.0 + row * 1.55;
-            const c = ins.t === 'a' ? RED : ins.t === 'w' ? YELLOW : ins.t === 'g' ? GREEN : ins.t === 'o' ? ORANGE : ACCENT;
-            s.addShape(pptx.ShapeType.roundRect, { x, y, w: 4.65, h: 1.42, fill: { color: SURF }, line: { color: c, pt: 1 }, rectRadius: .05 });
-            s.addShape(pptx.ShapeType.rect, { x, y, w: .07, h: 1.42, fill: { color: c } });
-            s.addText(se(ins.l), { x: x + .15, y: y + .12, w: 4.35, h: .3, fontSize: 10, bold: true, color: c, fontFace: 'Calibri' });
-            s.addText(se(ins.txt), { x: x + .15, y: y + .46, w: 4.35, h: .55, fontSize: 9, color: TEXT, fontFace: 'Calibri', wrap: true });
-            s.addText(se(ins.sub), { x: x + .15, y: y + 1.06, w: 4.35, h: .28, fontSize: 8, color: MUTED, italic: true, fontFace: 'Calibri', wrap: true });
-          });
-        }
-      }
-
-      // ════════════════════
-      //  SLIDE 12 — AÇÕES
-      // ════════════════════
-      {
-        const s = makeSlide('Acoes Prioritarias', 'Priorize nessa ordem para maximizar resultado');
-        const prev2_ = (activeYear === null && activeMonth > 0) ? MONTHS[activeMonth - 1] : null;
-        getAcoesList(M, prev2_).slice(0, 7).forEach((a, i) => {
-          const y = 1.02 + i * .64;
-          if (y > 5.2) return;
-          const c = a.p === 'ph' ? RED : a.p === 'pm' ? YELLOW : GREEN;
-          const lbl = { ph: 'URGENTE', pm: 'ESTA SEMANA', pl: 'ESTE MES' };
-          s.addShape(pptx.ShapeType.roundRect, { x: .25, y, w: 9.5, h: .58, fill: { color: SURF }, line: { color: c, pt: 1 }, rectRadius: .04 });
-          s.addShape(pptx.ShapeType.rect, { x: .25, y, w: .07, h: .58, fill: { color: c } });
-          s.addText(String(i + 1), { x: .32, y: y + .1, w: .38, h: .38, fontSize: 13, bold: true, color: c, fontFace: 'Calibri', align: 'center' });
-          s.addText(se(a.t), { x: .78, y: y + .07, w: 7.0, h: .26, fontSize: 10, bold: true, color: TEXT, fontFace: 'Calibri' });
-          s.addText(se(a.d).substring(0, 120) + (a.d.length > 120 ? '...' : ''), { x: .78, y: y + .34, w: 7.0, h: .2, fontSize: 8, color: MUTED, fontFace: 'Calibri' });
-          s.addShape(pptx.ShapeType.roundRect, { x: 8.0, y: y + .12, w: 1.65, h: .3, fill: { color: c + '22' }, line: { color: c, pt: 1 }, rectRadius: .03 });
-          s.addText(lbl[a.p], { x: 8.0, y: y + .12, w: 1.65, h: .3, fontSize: 8, bold: true, color: c, fontFace: 'Calibri', align: 'center', valign: 'middle' });
+        // Nota de fonte no rodapé do slide
+        const fonteSlide8 = usaFatRealAmbos ? 'Receita: faturamento real (caixa)' : 'Receita: orcamentos aprovados';
+        s.addText(fonteSlide8, {
+          x: .25, y: 5.22, w: 9.5, h: .15, fontSize: 7, color: MUTED, fontFace: 'Calibri', italic: true
         });
       }
 
-      // ── SALVAR ──
-      const nomeArq = (CFG.empresa || 'Dashboard')
-        .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .replace(/[^a-zA-Z0-9_\-]/g, '_');
-      const periodoArq = M.periodo
-        .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .replace(/[^a-zA-Z0-9_\-]/g, '_');
-      const fileName = nomeArq + '_' + periodoArq + '.pptx';
+// ════════════════════
+//  SLIDES 9A, 9B, 9C — FINANCEIRO
+//  Usa faturamento real se ambos os anos tiverem planilha
+// ════════════════════
+if (temDespesas) {
+const mesesFin = mesesDoAno.filter(m => m.geral.hasDespesas || parsedExpenses[m.key]);
 
-      const totalSlides = 12 + (temDespesas ? 0 : -1) + (prev_ ? 0 : -1) + (MONTHS.length >= 2 ? 0 : -1);
+// ── Receita de cada mês: faturamento real se temFatAtivo, senão aprovado ──
+const fatFin  = mesesFin.reduce((a, m) => {
+  const fat = getFatReal(m.key);
+  return a + (temFatAtivo && fat !== null ? fat : m.geral.aprovado);
+}, 0) || g.aprovado;
+const despFin  = mesesFin.reduce((a, m) => a + m.geral.despesas, 0) || g.despesas;
+const lucroFin = fatFin - despFin;
+const margemFin = fatFin > 0 ? +((lucroFin / fatFin) * 100).toFixed(1) : 0;
+const ratioFin  = fatFin > 0 ? +((despFin / fatFin) * 100).toFixed(1) : 0;
+const marColor  = margemFin >= (_benchmarks.margemIdeal || 20) ? GREEN
+                : margemFin >= (_benchmarks.margemBaixa || 10) ? YELLOW
+                : margemFin >= 0 ? ORANGE : RED;
+const fonteLabel9 = temFatAtivo ? 'faturamento real (caixa)' : 'orcamentos aprovados';
 
-      pptx.write({ outputType: 'blob' }).then(blob => {
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url; a.download = fileName;
-        document.body.appendChild(a); a.click();
-        setTimeout(() => { URL.revokeObjectURL(url); document.body.removeChild(a); }, 1000);
-        overlay.classList.remove('show');
-        showToast('Apresentacao gerada com sucesso!');
-      }).catch(e => {
-        console.error(e);
-        try {
-          pptx.writeFile({ fileName })
-            .then(() => overlay.classList.remove('show'))
-            .catch(() => overlay.classList.remove('show'));
-        } catch (e2) {
-          console.error(e2);
-          overlay.classList.remove('show');
-        }
+// ── SLIDE 9A — KPIs + GRÁFICO ──
+{
+  const s = makeSlide('Analise Financeira — ' + se(M.periodo), 'Receita, despesas, lucro e margem liquida');
+  const kpiCards = [
+    { l: 'Receita Total',   v: se(fmtK(fatFin)),   s: fonteLabel9,                                                                                          c: GREEN   },
+    { l: 'Despesas Totais', v: se(fmtK(despFin)),  s: ratioFin + '% da receita',                                                                            c: RED     },
+    { l: 'Lucro Liquido',   v: se(fmtK(lucroFin)), s: lucroFin >= 0 ? 'resultado positivo' : 'resultado negativo',                                          c: lucroFin >= 0 ? GREEN : RED },
+    { l: 'Margem Liquida',  v: margemFin + '%',    s: margemFin >= 20 ? 'excelente' : margemFin >= 10 ? 'saudavel' : margemFin >= 0 ? 'baixa' : 'negativa', c: marColor },
+  ];
+  kpiCards.forEach((k, i) => {
+    const x = .25 + i * 2.42;
+    s.addShape(pptx.ShapeType.roundRect, { x, y: .85, w: 2.3, h: 1.1, fill: { color: SURF }, line: { color: k.c, pt: 1 }, rectRadius: .05 });
+    s.addShape(pptx.ShapeType.rect,      { x, y: .85, w: 2.3, h: .05, fill: { color: k.c } });
+    s.addText(se(k.l), { x, y: .92,  w: 2.3, h: .2,  fontSize: 8,   bold: true, color: MUTED,  fontFace: 'Calibri', align: 'center' });
+    s.addText(se(k.v), { x, y: 1.14, w: 2.3, h: .42, fontSize: 17,  bold: true, color: k.c,    fontFace: 'Calibri', align: 'center' });
+    s.addText(se(k.s), { x, y: 1.58, w: 2.3, h: .18, fontSize: 7.5,             color: MUTED2, fontFace: 'Calibri', align: 'center' });
+  });
+  if (mesesFin.length > 0) {
+    const barData = [
+      { name: 'Receita',  labels: mesesFin.map(m => se(m.periodo)), values: mesesFin.map(m => {
+        const fat = getFatReal(m.key);
+        return +(temFatAtivo && fat !== null ? fat : m.geral.aprovado).toFixed(0);
+      })},
+      { name: 'Despesas', labels: mesesFin.map(m => se(m.periodo)), values: mesesFin.map(m => +m.geral.despesas.toFixed(0)) },
+      { name: 'Lucro',    labels: mesesFin.map(m => se(m.periodo)), values: mesesFin.map(m => {
+        const fat = getFatReal(m.key);
+        const rec = temFatAtivo && fat !== null ? fat : m.geral.aprovado;
+        return +(rec - m.geral.despesas).toFixed(0);
+      })},
+    ];
+    try {
+      s.addChart(pptx.ChartType.bar, barData, {
+        x: .25, y: 2.05, w: 9.5, h: 3.0, barDir: 'col', barGrouping: 'clustered',
+        chartColors: [GREEN, RED, ACCENT], showValue: true, dataLabelFontSize: 7, dataLabelColor: TEXT,
+        dataLabelFormatCode: '[>=10000]#,##0,"k";[<=-10000]-#,##0,"k";0',
+        catAxisLabelColor: MUTED2, catAxisLabelFontSize: 7, valAxisLabelColor: MUTED, valAxisLabelFontSize: 7,
+        valAxisLineShow: false, valAxisFormatCode: '[>=10000]#,##0,"k";[<=-10000]-#,##0,"k";0',
+        plotAreaBkgndColor: SURF, chartAreaBkgndColor: BG, legendPos: 'b', legendColor: MUTED2,
+        legendFontSize: 8, showLegend: true, border: { pt: 0 }, valGridLine: { color: SURF2, pt: .5 },
       });
+    } catch (e) { console.warn('Bar chart financeiro falhou', e); }
+  }
+  s.addText('Fonte: ' + fonteLabel9, {
+    x: .25, y: 5.22, w: 9.5, h: .15, fontSize: 7, color: MUTED, fontFace: 'Calibri', italic: true
+  });
+}
 
-    } catch (e) {
-      console.error('Erro PPTX:', e);
-      overlay.classList.remove('show');
-      alert('Erro ao gerar apresentacao: ' + e.message);
-    }
-  }, 300);
+// ── SLIDE 9B — RESUMO MENSAL ──
+{
+  const s = makeSlide('Resumo Mensal Financeiro — ' + se(M.periodo), 'Detalhamento mes a mes: receita, despesas, lucro e margem');
+  const mesesFinComFat = mesesFin.map(m => {
+    const fat = getFatReal(m.key);
+    const rec = temFatAtivo && fat !== null ? fat : m.geral.aprovado;
+    return { ...m, geral: { ...m.geral, aprovado: rec } };
+  });
+  const insFinanceiros = generateFinancialInsights(mesesFinComFat.length > 0 ? mesesFinComFat : [M]);
+  if (insFinanceiros.length > 0) {
+    const ins = insFinanceiros[0];
+    const cor = ins.t === 'a' ? RED : ins.t === 'w' ? YELLOW : ins.t === 'g' ? GREEN : ACCENT;
+    s.addShape(pptx.ShapeType.roundRect, { x: 6.6, y: .82, w: 3.1, h: 1.0, fill: { color: SURF }, line: { color: cor, pt: 1 }, rectRadius: .04 });
+    s.addShape(pptx.ShapeType.rect,      { x: 6.6, y: .82, w: .06, h: 1.0, fill: { color: cor } });
+    s.addText(se(ins.l),                     { x: 6.72, y: .88,  w: 2.9, h: .24, fontSize: 9, bold: true, color: cor,  fontFace: 'Calibri' });
+    s.addText(se(ins.txt).substring(0, 100), { x: 6.72, y: 1.14, w: 2.9, h: .6,  fontSize: 8,            color: TEXT, fontFace: 'Calibri', wrap: true });
+  }
+  const rowH   = mesesFin.length <= 8 ? .38 : mesesFin.length <= 12 ? .32 : .27;
+  const fszTab = mesesFin.length <= 8 ? 9  : mesesFin.length <= 12 ? 8  : 7;
+  s.addTable([
+    [
+      { text: 'Mes',      options: { bold: true, color: ACCENT, fill: { color: SURF2 }, fontFace: 'Calibri', fontSize: fszTab } },
+      { text: 'Receita',  options: { bold: true, color: ACCENT, fill: { color: SURF2 }, fontFace: 'Calibri', fontSize: fszTab } },
+      { text: 'Despesas', options: { bold: true, color: ACCENT, fill: { color: SURF2 }, fontFace: 'Calibri', fontSize: fszTab } },
+      { text: 'Lucro',    options: { bold: true, color: ACCENT, fill: { color: SURF2 }, fontFace: 'Calibri', fontSize: fszTab } },
+      { text: 'Margem',   options: { bold: true, color: ACCENT, fill: { color: SURF2 }, fontFace: 'Calibri', align: 'center', fontSize: fszTab } },
+    ],
+    ...mesesFinComFat.map(m => {
+      const ml = m.geral.aprovado - m.geral.despesas;
+      const mm = m.geral.aprovado > 0 ? +((ml / m.geral.aprovado) * 100).toFixed(1) : 0;
+      const mc = mm >= 20 ? GREEN : mm >= 10 ? YELLOW : mm >= 0 ? ORANGE : RED;
+      return [
+        { text: se(m.periodo),              options: { color: TEXT,                               fontFace: 'Calibri', fontSize: fszTab } },
+        { text: se(fmtK(m.geral.aprovado)), options: { color: GREEN,    bold: true,               fontFace: 'Calibri', fontSize: fszTab } },
+        { text: se(fmtK(m.geral.despesas)), options: { color: RED,      bold: true,               fontFace: 'Calibri', fontSize: fszTab } },
+        { text: se(fmtK(ml)),               options: { color: ml >= 0 ? GREEN : RED, bold: true,  fontFace: 'Calibri', fontSize: fszTab } },
+        { text: mm + '%',                   options: { color: mc,       bold: true,               fontFace: 'Calibri', align: 'center', fontSize: fszTab } },
+      ];
+    })
+  ], {
+    x: .25, y: .88, w: 6.2, colW: [1.9, 1.15, 1.15, 1.15, .85],
+    border: { type: 'none' }, fill: { color: SURF }, fontFace: 'Calibri',
+    fontSize: fszTab, rowH: rowH, autoPage: false,
+  });
+  s.addText('Fonte: ' + fonteLabel9, {
+    x: .25, y: 5.22, w: 6.2, h: .15, fontSize: 7, color: MUTED, fontFace: 'Calibri', italic: true
+  });
+}
+
+// ── SLIDE 9C — COMPARATIVO ANUAL FINANCEIRO ──
+// Usa faturamento real apenas se AMBOS os anos tiverem planilha
+if (anoAnterior !== null && mesesAnoAnterior.length > 0) {
+  const mesesAtivosIdx = mesesFin.map(m => +m.mes);
+  const mesesFinAnt = mesesAnoAnterior.filter(m =>
+    (m.geral.hasDespesas || parsedExpenses[m.key]) && mesesAtivosIdx.includes(+m.mes)
+  );
+
+  if (mesesFinAnt.length > 0) {
+    const fonteComp = usaFatRealAmbos ? 'faturamento real (caixa)' : 'orcamentos aprovados';
+    const s = makeSlide(
+      'Comparativo Financeiro — ' + anoAtivo + ' vs ' + anoAnterior,
+      'Receita, despesas e lucro: mesmo periodo dos dois anos | Fonte: ' + fonteComp
+    );
+
+    // Totais do ano atual (com faturamento real se disponível para ambos)
+    const fatFinComp  = mesesFin.reduce((a, m) => {
+      const fat = getFatReal(m.key);
+      return a + (usaFatRealAmbos && fat !== null ? fat : m.geral.aprovado);
+    }, 0);
+    const despFinComp = mesesFin.reduce((a, m) => a + m.geral.despesas, 0);
+    const lucroFinComp = fatFinComp - despFinComp;
+    const margemFinComp = fatFinComp > 0 ? +((lucroFinComp / fatFinComp) * 100).toFixed(1) : 0;
+
+    // Totais do ano anterior (com faturamento real se disponível para ambos)
+    const fatAnt   = mesesFinAnt.reduce((a, m) => {
+      const fat = getFatReal(m.key);
+      return a + (usaFatRealAmbos && fat !== null ? fat : m.geral.aprovado);
+    }, 0);
+    const despAnt  = mesesFinAnt.reduce((a, m) => a + m.geral.despesas, 0);
+    const lucroAnt  = fatAnt - despAnt;
+    const margemAnt = fatAnt > 0 ? +((lucroAnt / fatAnt) * 100).toFixed(1) : 0;
+
+    const varFat   = fatAnt   > 0 ? +(((fatFinComp   - fatAnt)   / fatAnt)   * 100).toFixed(1) : null;
+    const varDesp  = despAnt  > 0 ? +(((despFinComp  - despAnt)  / despAnt)  * 100).toFixed(1) : null;
+    const varLucro = lucroAnt !== 0 ? +(((lucroFinComp - lucroAnt) / Math.abs(lucroAnt)) * 100).toFixed(1) : null;
+    const varMar   = (margemFinComp - margemAnt).toFixed(1);
+
+    const cards = [
+      { l: 'Receita',        vAtual: se(fmtK(fatFinComp)),    vAnt: se(fmtK(fatAnt)),    var: varFat,             inv: false          },
+      { l: 'Despesas',       vAtual: se(fmtK(despFinComp)),   vAnt: se(fmtK(despAnt)),   var: varDesp,            inv: true           },
+      { l: 'Lucro Liquido',  vAtual: se(fmtK(lucroFinComp)),  vAnt: se(fmtK(lucroAnt)),  var: varLucro,           inv: false          },
+      { l: 'Margem Liquida', vAtual: margemFinComp + '%',     vAnt: margemAnt + '%',      var: parseFloat(varMar), inv: false, isMargem: true },
+    ];
+    cards.forEach((c, i) => {
+      const x = .25 + i * 2.42;
+      const up = c.inv ? (c.var !== null && c.var < 0) : (c.var !== null && c.var > 0);
+      const cor = c.var === null || Math.abs(c.var) < 0.5 ? MUTED : up ? GREEN : RED;
+      s.addShape(pptx.ShapeType.roundRect, { x, y: .85, w: 2.3, h: 1.3, fill: { color: SURF }, line: { color: cor, pt: 1 }, rectRadius: .05 });
+      s.addShape(pptx.ShapeType.rect,      { x, y: .85, w: 2.3, h: .05, fill: { color: cor } });
+      s.addText(se(c.l),      { x, y: .92,  w: 2.3, h: .2,  fontSize: 8,  bold: true, color: MUTED,  fontFace: 'Calibri', align: 'center' });
+      s.addText(se(c.vAtual), { x, y: 1.14, w: 2.3, h: .38, fontSize: 15, bold: true, color: cor,    fontFace: 'Calibri', align: 'center' });
+      s.addText('antes: ' + se(c.vAnt), { x, y: 1.54, w: 2.3, h: .2, fontSize: 8, color: MUTED2, fontFace: 'Calibri', align: 'center' });
+      const varTxt = c.var === null ? '—'
+        : c.isMargem ? (parseFloat(varMar) >= 0 ? '+' : '') + varMar + 'pp'
+        : (Math.abs(c.var) < 0.5 ? '= igual' : (up ? '+ ' : '- ') + Math.abs(c.var) + '%');
+      s.addText(varTxt, { x, y: 1.76, w: 2.3, h: .28, fontSize: 12, bold: true, color: cor, fontFace: 'Calibri', align: 'center' });
+    });
+
+    const nomesMeses = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+    const mesesLabel = mesesFin.map(m => nomesMeses[(+m.mes - 1)]);
+
+    // Valores do gráfico com faturamento real se ambos tiverem
+    const recAtual = mesesFin.map(m => {
+      const fat = getFatReal(m.key);
+      return +(usaFatRealAmbos && fat !== null ? fat : m.geral.aprovado).toFixed(0);
+    });
+    const recAnt = mesesFin.map(m => {
+      const eq = mesesAnoAnterior.find(ma => +ma.mes === +m.mes);
+      if (!eq) return 0;
+      const fat = getFatReal(eq.key);
+      return +(usaFatRealAmbos && fat !== null ? fat : eq.geral.aprovado).toFixed(0);
+    });
+    const lucAtual = mesesFin.map(m => {
+      const fat = getFatReal(m.key);
+      const rec = usaFatRealAmbos && fat !== null ? fat : m.geral.aprovado;
+      return +(rec - m.geral.despesas).toFixed(0);
+    });
+    const lucAnt = mesesFin.map(m => {
+      const eq = mesesAnoAnterior.find(ma => +ma.mes === +m.mes);
+      if (!eq) return 0;
+      const fat = getFatReal(eq.key);
+      const rec = usaFatRealAmbos && fat !== null ? fat : eq.geral.aprovado;
+      return +(rec - eq.geral.despesas).toFixed(0);
+    });
+
+    const barDataComp = [
+      { name: 'Receita ' + anoAtivo,    labels: mesesLabel, values: recAtual },
+      { name: 'Receita ' + anoAnterior, labels: mesesLabel, values: recAnt   },
+      { name: 'Lucro '  + anoAtivo,     labels: mesesLabel, values: lucAtual },
+      { name: 'Lucro '  + anoAnterior,  labels: mesesLabel, values: lucAnt   },
+    ];
+    try {
+      s.addChart(pptx.ChartType.bar, barDataComp, {
+        x: .25, y: 2.3, w: 9.5, h: 2.9, barDir: 'col', barGrouping: 'clustered',
+        chartColors: [GREEN, '1a6644', ACCENT, '1a3a6b'],
+        showValue: true, dataLabelFontSize: 6, dataLabelColor: TEXT,
+        dataLabelFormatCode: '[>=10000]#,##0,"k";[<=-10000]-#,##0,"k";0',
+        catAxisLabelColor: MUTED2, catAxisLabelFontSize: 8,
+        valAxisLabelColor: MUTED, valAxisLabelFontSize: 7, valAxisLineShow: false,
+        valAxisFormatCode: '[>=10000]#,##0,"k";[<=-10000]-#,##0,"k";0',
+        plotAreaBkgndColor: SURF, chartAreaBkgndColor: BG,
+        legendPos: 'b', legendColor: MUTED2, legendFontSize: 8, showLegend: true,
+        border: { pt: 0 }, valGridLine: { color: SURF2, pt: .5 },
+      });
+    } catch (e) { console.warn('Bar chart comparativo financeiro falhou', e); }
+
+    const periodoNota = mesesLabel[0] + '–' + mesesLabel[mesesLabel.length - 1];
+    s.addText(
+      'Periodo: ' + periodoNota + ' (' + mesesFin.length + ' meses) | Fonte: ' + fonteComp,
+      { x: .25, y: 5.22, w: 9.5, h: .18, fontSize: 7, color: MUTED, fontFace: 'Calibri', italic: true }
+    );
+  }
+}
+}
+
+// ════════════════════
+//  SLIDE 10 — OPORTUNIDADES A RECUPERAR
+// ════════════════════
+{
+const s = makeSlide('Oportunidades a Recuperar', se(pLabelP) + ' vencidos — follow-up imediato');
+const top = M.topVencidos.slice(0, 7);
+const tv = top.reduce((a, v) => a + v.total, 0);
+s.addText('Total em risco: ' + se(fmtK(tv)) + '   |   Recuperavel via follow-up (30%): ' + se(fmtK(tv * .3)), {
+  x: .3, y: .88, w: 9.4, h: .28, fontSize: 11, color: YELLOW, bold: true, fontFace: 'Calibri'
+});
+if (top.length > 0) {
+  s.addTable([
+    [
+      { text: se(cLabel),    options: { bold: true, color: ACCENT, fill: { color: SURF2 }, fontFace: 'Calibri' } },
+      { text: se(vLabel),    options: { bold: true, color: ACCENT, fill: { color: SURF2 }, fontFace: 'Calibri' } },
+      { text: 'Canal',       options: { bold: true, color: ACCENT, fill: { color: SURF2 }, fontFace: 'Calibri' } },
+      { text: 'Valor',       options: { bold: true, color: ACCENT, fill: { color: SURF2 }, fontFace: 'Calibri' } },
+      { text: 'Telefone',    options: { bold: true, color: ACCENT, fill: { color: SURF2 }, fontFace: 'Calibri' } },
+      { text: 'Dias Parado', options: { bold: true, color: ACCENT, fill: { color: SURF2 }, fontFace: 'Calibri', align: 'center' } },
+    ],
+    ...top.map(v => {
+      const dias = v.emissao ? Math.floor((Date.now() - v.emissao.getTime()) / 86400000) : null;
+      const corDias = dias === null ? MUTED : dias >= 60 ? RED : dias >= 30 ? YELLOW : MUTED2;
+      return [
+        { text: se(v.paciente || '—'),              options: { color: TEXT,   fontFace: 'Calibri' } },
+        { text: se(v.dentista || '—'),              options: { color: MUTED2, fontFace: 'Calibri' } },
+        { text: se(canalDisplay(v.campanha || '')), options: { color: MUTED2, fontFace: 'Calibri' } },
+        { text: se(fmtK(v.total)),                  options: { color: RED, bold: true, fontFace: 'Calibri' } },
+        { text: se(v.telefone || '—'),              options: { color: ACCENT, fontFace: 'Calibri' } },
+        { text: dias !== null ? String(dias) + 'd' : '—', options: { color: corDias, bold: dias !== null && dias >= 30, fontFace: 'Calibri', align: 'center' } },
+      ];
+    })
+  ], {
+    x: .25, y: 1.22, w: 9.5, colW: [2.3, 1.5, 1.4, 1.5, 2.0, 1.0],
+    border: { type: 'none' }, fill: { color: SURF }, fontFace: 'Calibri', fontSize: 10, rowH: .44, autoPage: false,
+  });
+} else {
+  s.addText('Nenhum vencido encontrado neste periodo.', { x: .3, y: 1.5, w: 9.4, h: .4, fontSize: 13, color: MUTED, italic: true, fontFace: 'Calibri' });
+}
+}
+
+// ════════════════════
+//  SLIDE 11 — ALERTAS
+// ════════════════════
+{
+const insights = generateInsights(M);
+insights.sort((a, b) => ({ 'a': 0, 'o': 1, 'w': 2, 'i': 3, 'g': 4 }[a.t] || 9) - ({ 'a': 0, 'o': 1, 'w': 2, 'i': 3, 'g': 4 }[b.t] || 9));
+for (let ci = 0; ci < insights.length; ci += 6) {
+  const chunk = insights.slice(ci, ci + 6);
+  const s = makeSlide('Alertas & Analise Inteligente' + (ci > 0 ? ' (cont.)' : ''), 'Gerados automaticamente a partir dos dados');
+  chunk.forEach((ins, i) => {
+    const col = i % 2, row = Math.floor(i / 2);
+    const x = .25 + col * 4.9, y = 1.0 + row * 1.55;
+    const c = ins.t === 'a' ? RED : ins.t === 'w' ? YELLOW : ins.t === 'g' ? GREEN : ins.t === 'o' ? ORANGE : ACCENT;
+    s.addShape(pptx.ShapeType.roundRect, { x, y, w: 4.65, h: 1.42, fill: { color: SURF }, line: { color: c, pt: 1 }, rectRadius: .05 });
+    s.addShape(pptx.ShapeType.rect, { x, y, w: .07, h: 1.42, fill: { color: c } });
+    s.addText(se(ins.l), { x: x + .15, y: y + .12, w: 4.35, h: .3, fontSize: 10, bold: true, color: c, fontFace: 'Calibri' });
+    s.addText(se(ins.txt), { x: x + .15, y: y + .46, w: 4.35, h: .55, fontSize: 9, color: TEXT, fontFace: 'Calibri', wrap: true });
+    s.addText(se(ins.sub), { x: x + .15, y: y + 1.06, w: 4.35, h: .28, fontSize: 8, color: MUTED, italic: true, fontFace: 'Calibri', wrap: true });
+  });
+}
+}
+
+// ════════════════════
+//  SLIDE 12 — AÇÕES
+// ════════════════════
+{
+const s = makeSlide('Acoes Prioritarias', 'Priorize nessa ordem para maximizar resultado');
+const prev2_ = (activeYear === null && activeMonth > 0) ? MONTHS[activeMonth - 1] : null;
+getAcoesList(M, prev2_).slice(0, 7).forEach((a, i) => {
+  const y = 1.02 + i * .64;
+  if (y > 5.2) return;
+  const c = a.p === 'ph' ? RED : a.p === 'pm' ? YELLOW : GREEN;
+  const lbl = { ph: 'URGENTE', pm: 'ESTA SEMANA', pl: 'ESTE MES' };
+  s.addShape(pptx.ShapeType.roundRect, { x: .25, y, w: 9.5, h: .58, fill: { color: SURF }, line: { color: c, pt: 1 }, rectRadius: .04 });
+  s.addShape(pptx.ShapeType.rect, { x: .25, y, w: .07, h: .58, fill: { color: c } });
+  s.addText(String(i + 1), { x: .32, y: y + .1, w: .38, h: .38, fontSize: 13, bold: true, color: c, fontFace: 'Calibri', align: 'center' });
+  s.addText(se(a.t), { x: .78, y: y + .07, w: 7.0, h: .26, fontSize: 10, bold: true, color: TEXT, fontFace: 'Calibri' });
+  s.addText(se(a.d).substring(0, 120) + (a.d.length > 120 ? '...' : ''), { x: .78, y: y + .34, w: 7.0, h: .2, fontSize: 8, color: MUTED, fontFace: 'Calibri' });
+  s.addShape(pptx.ShapeType.roundRect, { x: 8.0, y: y + .12, w: 1.65, h: .3, fill: { color: c + '22' }, line: { color: c, pt: 1 }, rectRadius: .03 });
+  s.addText(lbl[a.p], { x: 8.0, y: y + .12, w: 1.65, h: .3, fontSize: 8, bold: true, color: c, fontFace: 'Calibri', align: 'center', valign: 'middle' });
+});
+}
+
+// ── SALVAR ──
+const nomeArq = (CFG.empresa || 'Dashboard')
+.normalize('NFD')
+.replace(/[\u0300-\u036f]/g, '')
+.replace(/[^a-zA-Z0-9_\-]/g, '_');
+const periodoArq = M.periodo
+.normalize('NFD')
+.replace(/[\u0300-\u036f]/g, '')
+.replace(/[^a-zA-Z0-9_\-]/g, '_');
+const fileName = nomeArq + '_' + periodoArq + '.pptx';
+
+pptx.write({ outputType: 'blob' }).then(blob => {
+const url = URL.createObjectURL(blob);
+const a = document.createElement('a');
+a.href = url; a.download = fileName;
+document.body.appendChild(a); a.click();
+setTimeout(() => { URL.revokeObjectURL(url); document.body.removeChild(a); }, 1000);
+overlay.classList.remove('show');
+showToast('Apresentacao gerada com sucesso!');
+}).catch(e => {
+console.error(e);
+try {
+  pptx.writeFile({ fileName })
+    .then(() => overlay.classList.remove('show'))
+    .catch(() => overlay.classList.remove('show'));
+} catch (e2) {
+  console.error(e2);
+  overlay.classList.remove('show');
+}
+});
+
+} catch (e) {
+console.error('Erro PPTX:', e);
+overlay.classList.remove('show');
+alert('Erro ao gerar apresentacao: ' + e.message);
+}
+}, 300);
 }
