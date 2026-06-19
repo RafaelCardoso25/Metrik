@@ -1,0 +1,673 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Metrik — Acesso</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet"/>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:       #060810;
+      --surface:  #0C0F1A;
+      --border:   #151C2E;
+      --border2:  #1E2A45;
+      --accent:   #4F9CF9;
+      --accent2:  #6C63FF;
+      --text:     #E8EDF5;
+      --muted:    #4A5568;
+      --muted2:   #718096;
+      --green:    #34D399;
+      --red:      #F87171;
+    }
+
+    html, body { height: 100%; }
+
+    body {
+      background: var(--bg);
+      font-family: 'Inter', sans-serif;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      overflow: hidden;
+    }
+
+    .bg-grid {
+      position: fixed;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(79,156,249,.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(79,156,249,.03) 1px, transparent 1px);
+      background-size: 48px 48px;
+      pointer-events: none;
+    }
+
+    .bg-glow-1 {
+      position: fixed;
+      width: 600px; height: 600px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(79,156,249,.07) 0%, transparent 70%);
+      top: -200px; left: -100px;
+      pointer-events: none;
+    }
+
+    .bg-glow-2 {
+      position: fixed;
+      width: 500px; height: 500px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(108,99,255,.06) 0%, transparent 70%);
+      bottom: -150px; right: -100px;
+      pointer-events: none;
+    }
+
+    .container {
+      position: relative;
+      z-index: 10;
+      display: flex;
+      width: 100%;
+      max-width: 900px;
+      min-height: 560px;
+      margin: 16px;
+      border-radius: 20px;
+      overflow: hidden;
+      border: 1px solid var(--border2);
+      box-shadow:
+        0 0 0 1px rgba(79,156,249,.05),
+        0 32px 80px rgba(0,0,0,.6),
+        0 0 120px rgba(79,156,249,.04);
+    }
+
+    .left-panel {
+      flex: 1;
+      background: linear-gradient(135deg, #0A0F1E 0%, #080C18 100%);
+      padding: 56px 48px;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-start;
+      border-right: 1px solid var(--border);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .left-panel::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 2px;
+      background: linear-gradient(90deg, transparent, var(--accent), var(--accent2), transparent);
+    }
+
+    .left-inner {
+      position: relative;
+      z-index: 2;
+      flex: 1;
+    }
+
+    .brand-mark {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 48px;
+    }
+
+    .brand-icon {
+      width: 40px; height: 40px;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      font-weight: 800;
+      color: #fff;
+      letter-spacing: -1px;
+      box-shadow: 0 4px 20px rgba(79,156,249,.3);
+    }
+
+    .brand-name {
+      font-size: 22px;
+      font-weight: 800;
+      color: var(--text);
+      letter-spacing: -0.5px;
+    }
+
+    .left-headline {
+      font-size: 32px;
+      font-weight: 800;
+      color: var(--text);
+      line-height: 1.25;
+      letter-spacing: -0.8px;
+      margin-bottom: 16px;
+    }
+
+    .left-headline span {
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .left-sub {
+      font-size: 14px;
+      color: var(--muted2);
+      line-height: 1.7;
+      max-width: 280px;
+    }
+
+    .stats-row {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      margin-top: 40px;
+    }
+
+    .stat-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 14px 16px;
+      background: rgba(255,255,255,.02);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+    }
+
+    .stat-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .stat-dot.blue   { background: var(--accent);  box-shadow: 0 0 8px rgba(79,156,249,.6); }
+    .stat-dot.green  { background: var(--green);   box-shadow: 0 0 8px rgba(52,211,153,.6); }
+    .stat-dot.purple { background: var(--accent2); box-shadow: 0 0 8px rgba(108,99,255,.6); }
+
+    .stat-text {
+      font-size: 12px;
+      color: var(--muted2);
+      font-weight: 500;
+    }
+
+    .stat-text strong {
+      color: var(--text);
+      font-weight: 600;
+    }
+
+    .left-footer {
+      font-size: 11px;
+      color: var(--muted);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 28px;
+      padding-top: 20px;
+      border-top: 1px solid var(--border);
+    }
+
+    .left-footer::before {
+      content: '';
+      display: inline-block;
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: var(--green);
+      box-shadow: 0 0 6px rgba(52,211,153,.8);
+    }
+
+    .right-panel {
+      width: 400px;
+      flex-shrink: 0;
+      background: var(--surface);
+      padding: 56px 40px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+
+    .form-title {
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--text);
+      letter-spacing: -0.4px;
+      margin-bottom: 6px;
+    }
+
+    .form-subtitle {
+      font-size: 13px;
+      color: var(--muted2);
+      margin-bottom: 32px;
+    }
+
+    .tabs {
+      display: flex;
+      background: rgba(255,255,255,.03);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 4px;
+      margin-bottom: 28px;
+      gap: 4px;
+    }
+
+    .tab-btn {
+      flex: 1;
+      padding: 9px;
+      border: none;
+      border-radius: 7px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      font-family: 'Inter', sans-serif;
+      transition: all .2s;
+      background: transparent;
+      color: var(--muted2);
+      letter-spacing: .1px;
+    }
+
+    .tab-btn.active {
+      background: linear-gradient(135deg, rgba(79,156,249,.15), rgba(108,99,255,.15));
+      color: var(--text);
+      border: 1px solid rgba(79,156,249,.2);
+    }
+
+    .form-panel { display: none; }
+    .form-panel.active { display: block; }
+
+    .form-group { margin-bottom: 18px; }
+
+    .form-group label {
+      display: block;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--muted2);
+      margin-bottom: 8px;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+    }
+
+    .input-wrap { position: relative; }
+
+    .input-wrap svg {
+      position: absolute;
+      left: 14px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 16px; height: 16px;
+      color: var(--muted);
+      pointer-events: none;
+    }
+
+    .form-group input[type="email"],
+    .form-group input[type="password"] {
+      width: 100%;
+      background: rgba(255,255,255,.03);
+      border: 1px solid var(--border2);
+      border-radius: 10px;
+      padding: 13px 14px 13px 42px;
+      font-size: 14px;
+      color: var(--text);
+      font-family: 'Inter', sans-serif;
+      transition: border-color .2s, box-shadow .2s, background .2s;
+      outline: none;
+    }
+
+    .form-group input[type="email"]:focus,
+    .form-group input[type="password"]:focus {
+      border-color: var(--accent);
+      background: rgba(79,156,249,.04);
+      box-shadow: 0 0 0 3px rgba(79,156,249,.1);
+    }
+
+    .form-group input::placeholder { color: #2A3450; }
+
+    /* ── Lembrar de mim ── */
+    .lembrar-wrap {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: -8px;
+      margin-bottom: 20px;
+    }
+
+    .lembrar-wrap input[type="checkbox"] {
+      width: 15px;
+      height: 15px;
+      accent-color: var(--accent);
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+
+    .lembrar-wrap label {
+      font-size: 12px;
+      color: var(--muted2);
+      cursor: pointer;
+      user-select: none;
+      font-weight: 500;
+    }
+
+    .btn-submit {
+      width: 100%;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      padding: 14px;
+      font-size: 14px;
+      font-weight: 700;
+      font-family: 'Inter', sans-serif;
+      cursor: pointer;
+      transition: opacity .2s, transform .15s, box-shadow .2s;
+      margin-top: 8px;
+      letter-spacing: .2px;
+      box-shadow: 0 4px 20px rgba(79,156,249,.25);
+    }
+
+    .btn-submit:hover {
+      opacity: .92;
+      box-shadow: 0 6px 28px rgba(79,156,249,.4);
+      transform: translateY(-1px);
+    }
+
+    .btn-submit:active  { transform: scale(.98) translateY(0); }
+    .btn-submit:disabled { opacity: .45; cursor: not-allowed; transform: none; }
+
+    .msg-box {
+      display: none;
+      border-radius: 10px;
+      padding: 11px 14px;
+      font-size: 12.5px;
+      margin-top: 14px;
+      text-align: center;
+      line-height: 1.5;
+      font-weight: 500;
+    }
+
+    .msg-box.erro {
+      display: block;
+      background: rgba(248,113,113,.07);
+      border: 1px solid rgba(248,113,113,.25);
+      color: var(--red);
+    }
+
+    .msg-box.ok {
+      display: block;
+      background: rgba(52,211,153,.07);
+      border: 1px solid rgba(52,211,153,.25);
+      color: var(--green);
+    }
+
+    .divider {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin: 24px 0 0;
+    }
+
+    .divider-line {
+      flex: 1;
+      height: 1px;
+      background: var(--border);
+    }
+
+    .divider-txt {
+      font-size: 11px;
+      color: var(--muted);
+      font-weight: 500;
+      white-space: nowrap;
+    }
+
+    .form-footer {
+      margin-top: 24px;
+      text-align: center;
+      font-size: 11px;
+      color: var(--muted);
+      line-height: 1.7;
+    }
+
+    .form-footer a {
+      color: var(--accent);
+      text-decoration: none;
+      font-weight: 500;
+    }
+
+    .spinner {
+      display: inline-block;
+      width: 14px; height: 14px;
+      border: 2px solid rgba(255,255,255,.3);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin .6s linear infinite;
+      vertical-align: middle;
+      margin-right: 8px;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    @media (max-width: 720px) {
+      .left-panel { display: none; }
+      .right-panel { width: 100%; }
+      .container { max-width: 440px; }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="bg-grid"></div>
+  <div class="bg-glow-1"></div>
+  <div class="bg-glow-2"></div>
+
+  <div class="container">
+
+    <!-- ── Painel Esquerdo ── -->
+    <div class="left-panel">
+      <div class="left-inner">
+        <div class="brand-mark">
+          <div class="brand-icon">M</div>
+          <div class="brand-name">Metrik</div>
+        </div>
+
+        <div class="left-headline">
+          Inteligência<br/>comercial em<br/><span>tempo real.</span>
+        </div>
+
+        <p class="left-sub">
+          Acompanhe conversões, receita e performance da sua equipe em um único painel.
+        </p>
+
+        <div class="stats-row">
+          <div class="stat-item">
+            <div class="stat-dot blue"></div>
+            <div class="stat-text"><strong>Receita e conversão</strong> por período</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-dot green"></div>
+            <div class="stat-text"><strong>Performance</strong> por vendedor</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-dot purple"></div>
+            <div class="stat-text"><strong>Relatórios</strong> em PDF e PPTX</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="left-footer">
+        Sistema seguro e criptografado
+      </div>
+    </div>
+
+    <!-- ── Painel Direito ── -->
+    <div class="right-panel">
+      <div class="form-title" id="formTitle">Bem-vindo de volta</div>
+      <div class="form-subtitle" id="formSubtitle">Entre com suas credenciais para continuar</div>
+
+      <div class="tabs">
+        <button class="tab-btn active" onclick="trocarAba('login')">Entrar</button>
+        <button class="tab-btn" onclick="trocarAba('cadastro')">Criar conta</button>
+      </div>
+
+      <!-- ── Login ── -->
+      <div class="form-panel active" id="painelLogin">
+        <form onsubmit="handleLogin(event)">
+          <div class="form-group">
+            <label>E-mail</label>
+            <div class="input-wrap">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+              </svg>
+              <input type="email" id="loginEmail" placeholder="seu@email.com" autocomplete="email" required/>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Senha</label>
+            <div class="input-wrap">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                <path d="M7 11V7a5 5 0 0110 0v4"/>
+              </svg>
+              <input type="password" id="loginSenha" placeholder="••••••••" autocomplete="current-password" required/>
+            </div>
+          </div>
+
+          <!-- ── Lembrar de mim ── -->
+          <div class="lembrar-wrap">
+            <input type="checkbox" id="lembrarMe"/>
+            <label for="lembrarMe">Lembrar de mim por 30 dias</label>
+          </div>
+
+          <button type="submit" class="btn-submit" id="btnLogin">Entrar na plataforma</button>
+          <div class="msg-box" id="msgLogin"></div>
+        </form>
+      </div>
+
+      <!-- ── Cadastro ── -->
+      <div class="form-panel" id="painelCadastro">
+        <form onsubmit="handleCadastro(event)">
+          <div class="form-group">
+            <label>E-mail</label>
+            <div class="input-wrap">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+              </svg>
+              <input type="email" id="cadEmail" placeholder="seu@email.com" required/>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Senha</label>
+            <div class="input-wrap">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                <path d="M7 11V7a5 5 0 0110 0v4"/>
+              </svg>
+              <input type="password" id="cadSenha" placeholder="Mínimo 6 caracteres" minlength="6" required/>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Confirmar senha</label>
+            <div class="input-wrap">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                <path d="M7 11V7a5 5 0 0110 0v4"/>
+              </svg>
+              <input type="password" id="cadConfirma" placeholder="Repita a senha" required/>
+            </div>
+          </div>
+          <button type="submit" class="btn-submit" id="btnCadastro">Criar minha conta</button>
+          <div class="msg-box" id="msgCadastro"></div>
+        </form>
+      </div>
+
+      <div class="divider">
+        <div class="divider-line"></div>
+        <div class="divider-txt">acesso restrito</div>
+        <div class="divider-line"></div>
+      </div>
+
+      <div class="form-footer">
+        Novas contas requerem aprovação do administrador.<br/>
+        Dúvidas? <a href="mailto:suporte@metrik.com.br">Entre em contato</a>
+      </div>
+    </div>
+
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="supabase-cfg.js"></script>
+  <script src="auth.js"></script>
+
+  <script>
+    function trocarAba(aba) {
+      const isLogin = aba === 'login';
+      document.getElementById('painelLogin').classList.toggle('active', isLogin);
+      document.getElementById('painelCadastro').classList.toggle('active', !isLogin);
+      document.querySelectorAll('.tab-btn').forEach((btn, i) => {
+        btn.classList.toggle('active', isLogin ? i === 0 : i === 1);
+      });
+      document.getElementById('formTitle').textContent =
+        isLogin ? 'Bem-vindo de volta' : 'Criar sua conta';
+      document.getElementById('formSubtitle').textContent =
+        isLogin ? 'Entre com suas credenciais para continuar'
+                : 'Preencha os dados abaixo para solicitar acesso';
+    }
+
+    async function handleLogin(e) {
+      e.preventDefault();
+      const email    = document.getElementById('loginEmail').value.trim();
+      const senha    = document.getElementById('loginSenha').value;
+      const lembrar  = document.getElementById('lembrarMe').checked;
+      const btn      = document.getElementById('btnLogin');
+      const msg      = document.getElementById('msgLogin');
+
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner"></span>Verificando...';
+      msg.className = 'msg-box';
+
+      const result = await authLogin(email, senha, lembrar);
+
+      if (result.ok) {
+        btn.innerHTML = '<span class="spinner"></span>Redirecionando...';
+        window.location.href = 'index.html';
+      } else {
+        btn.disabled = false;
+        btn.innerHTML = 'Entrar na plataforma';
+        msg.textContent = result.msg;
+        msg.className = 'msg-box erro';
+      }
+    }
+
+    async function handleCadastro(e) {
+      e.preventDefault();
+      const email    = document.getElementById('cadEmail').value.trim();
+      const senha    = document.getElementById('cadSenha').value;
+      const confirma = document.getElementById('cadConfirma').value;
+      const btn      = document.getElementById('btnCadastro');
+      const msg      = document.getElementById('msgCadastro');
+
+      if (senha !== confirma) {
+        msg.textContent = 'As senhas não coincidem.';
+        msg.className = 'msg-box erro';
+        return;
+      }
+
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner"></span>Criando conta...';
+      msg.className = 'msg-box';
+
+      const result = await authCadastro(email, senha);
+
+      btn.disabled = false;
+      btn.innerHTML = 'Criar minha conta';
+
+      if (result.ok) {
+        msg.textContent = '✓ Conta criada! Aguarde a aprovação do administrador para acessar.';
+        msg.className = 'msg-box ok';
+        document.getElementById('cadEmail').value = '';
+        document.getElementById('cadSenha').value = '';
+        document.getElementById('cadConfirma').value = '';
+      } else {
+        msg.textContent = result.msg;
+        msg.className = 'msg-box erro';
+      }
+    }
+  </script>
+
+</body>
+</html>

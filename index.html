@@ -10,24 +10,12 @@
     href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@400;500;600&display=swap"
     rel="stylesheet">
   <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="supabase-cfg.js"></script>
+  <script src="auth.js"></script>
 </head>
 
 <body>
-
-  <!-- ═══════════ LOGIN ═══════════ -->
-  <div id="loginScreen">
-    <div class="login-box">
-      <span class="login-logo">📊</span>
-      <div class="login-title">Metrik</div>
-      <div class="login-sub">Dashboard Comercial · Acesso Restrito</div>
-      <label class="login-label">Senha de Acesso</label>
-      <input type="password" id="loginPwd" class="login-input" placeholder="Digite sua senha"
-        onkeydown="if(event.key==='Enter') doLogin()">
-      <button class="login-btn" onclick="doLogin()">Entrar</button>
-      <div class="login-err" id="loginErr"></div>
-      <div class="login-footer">Sessão válida por 8 horas</div>
-    </div>
-  </div>
 
   <!-- ═══════════ LOADING ═══════════ -->
   <div id="loadingScreen">

@@ -1,35 +1,4 @@
 // ═══════════════════════════════════════
-//  LOGIN — SHA-256
-// ═══════════════════════════════════════
-async function sha256(str) {
-  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
-  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
-}
-(function () {
-  const ok = sessionStorage.getItem('dash_auth');
-  const exp = sessionStorage.getItem('dash_auth_exp');
-  if (ok === '1' && exp && Date.now() < +exp) document.getElementById('loginScreen').style.display = 'none';
-  else { sessionStorage.removeItem('dash_auth'); sessionStorage.removeItem('dash_auth_exp'); }
-})();
-async function doLogin() {
-  const pwd = document.getElementById('loginPwd').value;
-  const err = document.getElementById('loginErr');
-  if (!pwd) { err.textContent = 'Digite a senha.'; return; }
-  const correct = await sha256('Metrik2026');
-  const entered = await sha256(pwd);
-  if (entered === correct) {
-    sessionStorage.setItem('dash_auth', '1');
-    sessionStorage.setItem('dash_auth_exp', String(Date.now() + 8 * 60 * 60 * 1000));
-    document.getElementById('loginScreen').style.display = 'none';
-    err.textContent = '';
-  } else {
-    err.textContent = 'Senha incorreta. Tente novamente.';
-    document.getElementById('loginPwd').value = '';
-    document.getElementById('loginPwd').focus();
-  }
-}
-
-// ═══════════════════════════════════════
 //  PLURAL INTELIGENTE EM PORTUGUÊS
 // ═══════════════════════════════════════
 function pluralizar(palavra) {

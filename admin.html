@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Admin — Usuários</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet"/>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: #0F1320;
+      font-family: 'Inter', sans-serif;
+      color: #F1F5F9;
+      min-height: 100vh;
+      padding: 40px 24px 60px;
+    }
+
+    h1 {
+      font-size: 22px;
+      font-weight: 600;
+      color: #F1F5F9;
+      margin-bottom: 24px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: #151C30;
+      border-radius: 8px;
+      overflow: hidden;
+      border: 1px solid #1E2640;
+    }
+
+    thead {
+      background: #1E2640;
+    }
+
+    thead th {
+      padding: 12px 10px;
+      text-align: left;
+      font-size: 12px;
+      font-weight: 600;
+      color: #64748B;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    tbody tr {
+      border-top: 1px solid #1E2640;
+    }
+
+    tbody tr:hover {
+      background: #1A2236;
+    }
+
+    td {
+      padding: 10px;
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>⚙️ Gerenciar Usuários</h1>
+
+  <table>
+    <thead>
+      <tr>
+        <th>E-mail</th>
+        <th>Status</th>
+        <th>Ação</th>
+        <th>Admin</th>
+      </tr>
+    </thead>
+    <tbody id="lista-usuarios">
+      <tr>
+        <td colspan="4" style="color:#64748B; padding:20px;">Carregando...</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <!-- 1º BIBLIOTECA DO SUPABASE -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <!-- 2º CONFIG -->
+  <script src="supabase-cfg.js"></script>
+  <!-- 3º AUTH -->
+  <script src="auth.js"></script>
+
+  <script>
+    async function carregarUsuarios() {
+  const { data, error } = await _sb.rpc('get_todos_usuarios');
+
+  const tbody = document.getElementById('lista-usuarios');
+
+  if (error || !data) {
+    tbody.innerHTML = '<tr><td colspan="4" style="color:#F87171; padding:10px;">Erro ao carregar usuários.</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = data.map(u => `
+    <tr>
+      <td style="color:#F1F5F9;">${u.email}</td>
+      <td>${u.aprovado ? '✅ Aprovado' : '⏳ Pendente'}</td>
+      <td>
+        <button onclick="toggleAprovado('${u.id}', ${u.aprovado})" style="
+          background:${u.aprovado ? '#1E2640' : '#1E4033'};
+          color:${u.aprovado ? '#F87171' : '#34D399'};
+          border:1px solid ${u.aprovado ? '#F87171' : '#34D399'};
+          border-radius:4px;
+          padding:4px 12px;
+          font-size:12px;
+          cursor:pointer;
+          font-family:'Inter',sans-serif;
+        ">
+          ${u.aprovado ? 'Reprovar' : 'Aprovar'}
+        </button>
+      </td>
+      <td>
+        <button onclick="toggleAdmin('${u.id}', ${u.admin})" style="
+          background:${u.admin ? '#2D1E40' : '#1E2640'};
+          color:${u.admin ? '#A78BFA' : '#64748B'};
+          border:1px solid ${u.admin ? '#A78BFA' : '#334155'};
+          border-radius:4px;
+          padding:4px 12px;
+          font-size:12px;
+          cursor:pointer;
+          font-family:'Inter',sans-serif;
+        ">
+          ${u.admin ? '👑 Admin' : 'Tornar Admin'}
+        </button>
+      </td>
+    </tr>
+  `).join('');
+}
+
+    async function toggleAprovado(id, aprovadoAtual) {
+      const { error } = await _sb
+        .from('usuarios')
+        .update({ aprovado: !aprovadoAtual })
+        .eq('id', id)
+
+      if (!error) carregarUsuarios()
+    }
+
+    async function toggleAdmin(id, adminAtual) {
+      const { error } = await _sb
+        .from('usuarios')
+        .update({ admin: !adminAtual })
+        .eq('id', id)
+
+      if (!error) carregarUsuarios()
+    }
+
+    authGuardAdmin().then(autorizado => {
+      if (autorizado) carregarUsuarios()
+    })
+  </script>
+
+</body>
+</html>
