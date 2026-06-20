@@ -42,11 +42,11 @@
       <div class="metrik-header">
         <span class="metrik-logo">📊</span>
         <div class="metrik-title">Metrik</div>
-        <div class="metrik-sub">Configure sua clínica e importe os dados para começar</div>
+        <div class="metrik-sub" id="metrikSub">Configure sua clínica e importe os dados para começar</div>
       </div>
 
       <!-- Config -->
-      <div class="config-card">
+      <div class="config-card" id="configCard">
         <div class="config-card-title">⚙️ Configuração da Empresa</div>
         <div class="config-grid">
           <div class="config-field full">
@@ -99,9 +99,9 @@
         <div class="drop-zone-new" id="dropZone" onclick="document.getElementById('fileInput').click()">
           <span class="drop-zone-icon">📁</span>
           <div class="drop-zone-text">Arraste os arquivos ou clique para selecionar</div>
-          <div class="drop-zone-sub">Excel (.xlsx, .xls) · JSON de sessão salva</div>
+          <div class="drop-zone-sub">Excel (.xlsx, .xls)</div>
         </div>
-        <input type="file" id="fileInput" multiple accept=".xlsx,.xls,.json" onchange="handleFiles(event)">
+        <input type="file" id="fileInput" multiple accept=".xlsx,.xls" onchange="handleFiles(event)">
 
         <div class="import-btns">
           <button class="import-btn budget" onclick="document.getElementById('fileInput').click()">
@@ -111,7 +111,7 @@
             💰 Despesas
           </button>
           <button class="import-btn purple" onclick="document.getElementById('fileInput').click()">
-            📁 Sessão JSON
+            💵 Faturamento Real
           </button>
         </div>
 
@@ -136,8 +136,7 @@
               <span class="template-icon">📋</span>
               <div class="template-info">
                 <div class="template-name">Template de Orçamentos</div>
-                <div class="template-desc">Modelo com todas as colunas necessárias para importar orçamentos mensais
-                </div>
+                <div class="template-desc">Modelo com todas as colunas necessárias para importar orçamentos mensais</div>
               </div>
               <button class="template-btn" onclick="downloadTemplate('orcamentos')">Baixar</button>
             </div>
@@ -153,14 +152,13 @@
               <span class="template-icon">💵</span>
               <div class="template-info">
                 <div class="template-name">Template de Faturamento Real</div>
-                <div class="template-desc">Modelo para informar o caixa real recebido por mês — independente dos
-                  orçamentos aprovados</div>
+                <div class="template-desc">Modelo para informar o caixa real recebido por mês</div>
               </div>
-              <button class="template-btn" style="background:var(--accent2)"
-                onclick="downloadTemplate('faturamento')">Baixar</button>
+              <button class="template-btn" style="background:var(--accent2)" onclick="downloadTemplate('faturamento')">Baixar</button>
             </div>
           </div>
         </div>
+
         <div id="monthChips" class="month-chips"></div>
         <div id="sessionLoadedBadge"></div>
         <div id="detectionFeedback"></div>
@@ -193,8 +191,8 @@
           <div class="goal-wrap">
             <span class="goal-lbl">🎯 Meta</span>
             <div class="goal-input-group">
-              <input type="text" id="goalInput" class="goal-input" placeholder="R$ 0,00" onchange="setGoal(this.value)"
-                onblur="setGoal(this.value)">
+              <input type="text" id="goalInput" class="goal-input" placeholder="R$ 0,00"
+                onchange="setGoal(this.value)" onblur="setGoal(this.value)">
               <div id="goalProgressBar" class="goal-progress-bar">
                 <div id="goalProgressFill" class="goal-progress-fill"></div>
               </div>
@@ -207,23 +205,29 @@
           <button class="tbtn csv" onclick="exportExcel()">📥 Excel</button>
           <button class="tbtn green" onclick="exportPDF()">📄 PDF</button>
           <button class="tbtn purple" onclick="exportPPTX()">📊 PPTX</button>
-          <button class="tbtn purple" onclick="saveSessionJSON()">💾 Salvar</button>
           <button id="btnApresentacao" class="tbtn" onclick="toggleApresentacao()">🖥️ Apresentação</button>
-          <button class="tbtn" onclick="resetDash()">↩ Novo</button>
+          <button onclick="abrirEdicaoEmpresaDash()" style="padding:6px 14px;background:rgba(255,255,255,.05);
+            border:1px solid rgba(255,255,255,.1);border-radius:8px;color:rgba(255,255,255,.6);
+            font-size:12px;cursor:pointer;transition:.2s"
+            onmouseover="this.style.color='#fff'" onmouseout="this.style.color='rgba(255,255,255,.6)'">
+            ⚙️ Empresa
+          </button>
+          <button class="tbtn" onclick="novoPeriodo()">📂 Subir Planilhas</button>
         </div>
       </div>
 
       <!-- APRESENTAÇÃO CONTROLS -->
       <div id="apresentacaoControls"
-        style="display:none;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:10px 16px;margin-bottom:16px;align-items:center;gap:12px;flex-wrap:wrap">
+        style="display:none;background:var(--surface);border:1px solid var(--border);border-radius:10px;
+        padding:10px 16px;margin-bottom:16px;align-items:center;gap:12px;flex-wrap:wrap">
         <button onclick="apresentacaoPrev()"
-          style="background:var(--surface2);border:1px solid var(--border2);color:var(--muted2);padding:6px 14px;border-radius:7px;cursor:pointer;font-size:13px">◀
-          Anterior</button>
+          style="background:var(--surface2);border:1px solid var(--border2);color:var(--muted2);
+          padding:6px 14px;border-radius:7px;cursor:pointer;font-size:13px">◀ Anterior</button>
         <span id="apresentacaoTabLabel"
           style="font-size:12px;color:var(--muted2);font-weight:600;flex:1;text-align:center"></span>
         <button onclick="apresentacaoNext()"
-          style="background:var(--surface2);border:1px solid var(--border2);color:var(--muted2);padding:6px 14px;border-radius:7px;cursor:pointer;font-size:13px">Próximo
-          ▶</button>
+          style="background:var(--surface2);border:1px solid var(--border2);color:var(--muted2);
+          padding:6px 14px;border-radius:7px;cursor:pointer;font-size:13px">Próximo ▶</button>
         <div style="display:flex;gap:6px;align-items:center">
           <span style="font-size:11px;color:var(--muted)">Intervalo:</span>
           <button class="apres-interval-btn dfilter-btn" onclick="setApresInterval(5000,this)">5s</button>
@@ -232,8 +236,8 @@
           <button class="apres-interval-btn dfilter-btn" onclick="setApresInterval(0,this)">Manual</button>
         </div>
         <button onclick="sairApresentacao()"
-          style="background:rgba(248,113,113,.1);border:1px solid rgba(248,113,113,.3);color:var(--red);padding:6px 14px;border-radius:7px;cursor:pointer;font-size:12px">✕
-          Sair</button>
+          style="background:rgba(248,113,113,.1);border:1px solid rgba(248,113,113,.3);
+          color:var(--red);padding:6px 14px;border-radius:7px;cursor:pointer;font-size:12px">✕ Sair</button>
         <div style="width:100%;height:2px;background:var(--border);border-radius:1px;margin-top:4px">
           <div id="apresentacaoProgress"
             style="height:100%;width:0%;background:var(--accent);border-radius:1px;transition:width .1s linear"></div>
@@ -272,17 +276,13 @@
       <!-- ══════ TAB: VISÃO GERAL ══════ -->
       <div class="tab-panel active" id="tab-visao">
         <div id="kpiGrid" class="kpi-grid"></div>
-
         <div class="card full">
           <div class="card-title">
             <span class="dot" style="background:var(--accent2)"></span>
             Evolução Histórica
           </div>
-          <div style="height:280px">
-            <canvas id="trendChart"></canvas>
-          </div>
+          <div style="height:280px"><canvas id="trendChart"></canvas></div>
         </div>
-
         <div class="grid-2">
           <div class="card">
             <div class="card-title">
@@ -299,7 +299,6 @@
             <div id="canaisGrid" class="canal-grid"></div>
           </div>
         </div>
-
         <div class="sec">Análise Inteligente</div>
         <div id="insGrid" class="ins-grid"></div>
       </div>
@@ -309,7 +308,6 @@
         <div class="sec"><span id="secVendedores">Filtrar por Vendedor</span></div>
         <div id="dentFilterBtns" class="dent-filter"></div>
         <div id="dentDetailView"></div>
-
         <div class="card full">
           <div class="card-title">
             <span class="dot" style="background:var(--accent)"></span>
@@ -343,7 +341,6 @@
             </table>
           </div>
         </div>
-
         <div class="grid-2">
           <div class="card">
             <div class="card-title">
@@ -366,33 +363,30 @@
       <!-- ══════ TAB: EVOLUÇÃO VENDEDORES ══════ -->
       <div class="tab-panel" id="tab-vendedores">
         <div class="sec" id="secEvolucaoVendedor" style="margin-bottom:12px">Evolução por Vendedor</div>
-
         <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:20px;align-items:flex-start">
           <div class="card" style="min-width:200px;flex-shrink:0;padding:16px 20px">
             <div id="seletorVendedorTitulo"
-              style="font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-bottom:12px">
-              Selecionar Vendedores
-            </div>
+              style="font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;
+              color:var(--muted);margin-bottom:12px">Selecionar Vendedores</div>
             <div id="vendedorSeletorBtns" style="display:flex;flex-direction:column;gap:6px"></div>
             <button onclick="selecionarTodosVendedores()"
-              style="margin-top:10px;width:100%;padding:6px;background:var(--surface2);border:1px solid var(--border);color:var(--muted);font-size:11px;border-radius:7px;cursor:pointer;">
+              style="margin-top:10px;width:100%;padding:6px;background:var(--surface2);
+              border:1px solid var(--border);color:var(--muted);font-size:11px;border-radius:7px;cursor:pointer;">
               Selecionar Todos
             </button>
             <button onclick="limparVendedores()"
-              style="margin-top:6px;width:100%;padding:6px;background:var(--surface2);border:1px solid var(--border);color:var(--muted);font-size:11px;border-radius:7px;cursor:pointer;">
+              style="margin-top:6px;width:100%;padding:6px;background:var(--surface2);
+              border:1px solid var(--border);color:var(--muted);font-size:11px;border-radius:7px;cursor:pointer;">
               Limpar Seleção
             </button>
           </div>
-
           <div style="flex:1;min-width:0">
             <div class="dfilter-row" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">
               <button class="dfilter-btn active" onclick="setVendedorMetric('conversao',this)">Conversão %</button>
               <button class="dfilter-btn" onclick="setVendedorMetric('faturamento',this)">Faturamento</button>
               <button class="dfilter-btn" onclick="setVendedorMetric('ticket',this)">Ticket Médio</button>
-              <button class="dfilter-btn" onclick="setVendedorMetric('pacientes',this)"
-                id="btnMetricPacientes">Fechados</button>
+              <button class="dfilter-btn" onclick="setVendedorMetric('pacientes',this)" id="btnMetricPacientes">Fechados</button>
             </div>
-
             <div class="card full" style="margin-bottom:20px">
               <div class="card-title">
                 <span class="dot" style="background:var(--accent)"></span>
@@ -406,7 +400,6 @@
             </div>
           </div>
         </div>
-
         <div class="card full" style="margin-bottom:20px">
           <div class="card-title">
             <span class="dot" style="background:var(--green)"></span>
@@ -416,7 +409,6 @@
             <table class="tbl" id="vendedorRankingTable"></table>
           </div>
         </div>
-
         <div class="card full">
           <div class="card-title">
             <span class="dot" style="background:var(--accent2)"></span>
@@ -434,9 +426,7 @@
               <span class="dot" style="background:var(--accent)"></span>
               Receita por Canal
             </div>
-            <div style="height:260px">
-              <canvas id="canalDonutChart"></canvas>
-            </div>
+            <div style="height:260px"><canvas id="canalDonutChart"></canvas></div>
           </div>
           <div class="card">
             <div class="card-title">
@@ -446,7 +436,6 @@
             <div id="canalDonutLegend"></div>
           </div>
         </div>
-
         <div class="grid-2" style="margin-bottom:20px">
           <div class="card">
             <div class="card-title">
@@ -463,7 +452,6 @@
             <div id="canalFatBars"></div>
           </div>
         </div>
-
         <div class="card full" style="margin-bottom:20px">
           <div class="card-title">
             <span class="dot" style="background:var(--accent)"></span>
@@ -473,7 +461,6 @@
             <table class="tbl" id="canalTable"></table>
           </div>
         </div>
-
         <div class="card full">
           <div class="card-title">
             <span class="dot" style="background:var(--accent2)"></span>
@@ -516,12 +503,28 @@
     </div>
   </div>
 
+  <!-- TELA DE EMPRESAS -->
+  <div id="empresasWrap" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:9999;
+    align-items:center;justify-content:center;"></div>
+
+  <!-- LOADING DADOS -->
+  <div id="loadingDadosWrap" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:9998;">
+    <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;
+      width:100%;height:100%;gap:16px;">
+      <div style="width:48px;height:48px;border:4px solid rgba(255,255,255,0.2);
+        border-top-color:#6c63ff;border-radius:50%;animation:spin 0.8s linear infinite;"></div>
+      <div style="color:#fff;font-size:16px;font-weight:500;">Carregando seus dados...</div>
+    </div>
+  </div>
+
   <!-- SCRIPTS -->
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js"></script>
+  <script src="empresas.js"></script>
+  <script src="db.js"></script>
   <script src="script.js"></script>
 </body>
 

@@ -415,3 +415,191 @@ body::before{content:'';position:fixed;inset:0;background:
 
 /* FINANCEIRO COMPARATIVO */
 .fin-comparativo-seletor{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:20px}
+
+/* ═══════════════════════════════════════
+   EMPRESAS
+═══════════════════════════════════════ */
+
+.empresas-modal {
+  background: #1e1e2e;
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 20px;
+  padding: 32px;
+  width: 100%;
+  max-width: 480px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  box-shadow: 0 24px 60px rgba(0,0,0,0.5);
+}
+
+.empresas-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.empresas-titulo {
+  font-size: 22px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.empresas-sub {
+  font-size: 14px;
+  color: rgba(255,255,255,0.5);
+  margin-top: 2px;
+}
+
+.empresas-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.empresa-item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.empresa-item:hover {
+  background: rgba(108,99,255,0.15);
+  border-color: rgba(108,99,255,0.4);
+  transform: translateX(4px);
+}
+
+.empresa-item-icon {
+  font-size: 24px;
+  flex-shrink: 0;
+}
+
+.empresa-item-info {
+  flex: 1;
+}
+
+.empresa-item-nome {
+  font-size: 15px;
+  font-weight: 600;
+  color: #fff;
+}
+
+.empresa-item-cfg {
+  font-size: 12px;
+  color: rgba(255,255,255,0.4);
+  margin-top: 3px;
+}
+
+.empresa-item-arrow {
+  color: rgba(255,255,255,0.3);
+  font-size: 18px;
+  transition: transform 0.2s;
+}
+
+.empresa-item:hover .empresa-item-arrow {
+  transform: translateX(4px);
+  color: #6c63ff;
+}
+
+.empresas-btn-nova {
+  width: 100%;
+  padding: 12px;
+  background: transparent;
+  border: 1px dashed rgba(255,255,255,0.2);
+  border-radius: 10px;
+  color: rgba(255,255,255,0.5);
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.empresas-btn-nova:hover {
+  border-color: #6c63ff;
+  color: #6c63ff;
+  background: rgba(108,99,255,0.05);
+}
+
+.empresas-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+}
+
+.form-group label {
+  font-size: 12px;
+  font-weight: 500;
+  color: rgba(255,255,255,0.5);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.form-group input {
+  padding: 10px 14px;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 8px;
+  color: #fff;
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.form-group input:focus {
+  border-color: #6c63ff;
+}
+
+.form-group input::placeholder {
+  color: rgba(255,255,255,0.25);
+}
+
+.form-row {
+  display: flex;
+  gap: 12px;
+}
+
+.empresas-btn-criar {
+  flex: 1;
+  padding: 13px;
+  background: linear-gradient(135deg, #6c63ff, #8b5cf6);
+  border: none;
+  border-radius: 10px;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.empresas-btn-criar:hover {
+  opacity: 0.9;
+  transform: translateY(-1px);
+}
+
+.empresas-btn-sec {
+  padding: 13px 20px;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 10px;
+  color: rgba(255,255,255,0.6);
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.empresas-btn-sec:hover {
+  background: rgba(255,255,255,0.1);
+  color: #fff;
+}

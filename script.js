@@ -399,41 +399,6 @@ function applyConfigToUI() {
   }
 }
 
-// ═══════════════════════════════════════
-//  SAVE / LOAD JSON
-// ═══════════════════════════════════════
-function saveSessionJSON() {
-  const mesesSerializados = {};
-  Object.entries(parsedMonths).forEach(([key, m]) => {
-    mesesSerializados[key] = {
-      key: m.key, periodo: m.periodo, mes: m.mes, ano: m.ano,
-      records: m.records.map(r => ({
-        ...r,
-        emissao: r.emissao instanceof Date ? r.emissao.toISOString().split('T')[0] : (r.emissao || null),
-        aprovacao: r.aprovacao instanceof Date ? r.aprovacao.toISOString().split('T')[0] : (r.aprovacao || null),
-      }))
-    };
-  });
-  const sessao = {
-    versao: '2.1', geradoEm: new Date().toISOString(),
-    cfg: { ...CFG }, benchmarks: { ..._benchmarks },
-    metas: { ..._metasMensais }, notas: { ..._notas },
-    despesas: { ...parsedExpenses },
-    faturamento: { ...parsedFaturamento },
-    meses: mesesSerializados,
-  };
-  const json = JSON.stringify(sessao, null, 2);
-  const blob = new Blob([json], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  const nomeEmp = (CFG.empresa || 'Metrik').replace(/[^a-zA-Z0-9]/g, '_');
-  a.href = url;
-  a.download = `Metrik_Sessao_${nomeEmp}_${new Date().toISOString().slice(0, 10)}.json`;
-  document.body.appendChild(a); a.click();
-  setTimeout(() => { URL.revokeObjectURL(url); document.body.removeChild(a); }, 1000);
-  showToast('💾 Sessão salva! ' + Object.keys(mesesSerializados).length + ' meses exportados.');
-}
-
 function loadSessionJSON(file) {
   if (!file) return;
   const reader = new FileReader();
@@ -510,30 +475,43 @@ function showToast(msg, isError = false) {
 function handleFiles(e) {
   const files = [...e.target.files];
   if (!files.length) return;
-  const jsonFiles = files.filter(f => f.name.endsWith('.json'));
+
   const xlsFiles = files.filter(f => !f.name.endsWith('.json'));
-  jsonFiles.forEach(f => loadSessionJSON(f));
-  if (!xlsFiles.length) { if (e.target) e.target.value = ''; return; }
+  if (!xlsFiles.length) {
+    if (e.target) e.target.value = '';
+    return;
+  }
+
   document.getElementById('errBanner').style.display = 'none';
   document.getElementById('suspectBanner').style.display = 'none';
   document.getElementById('loadingScreen').style.display = 'flex';
   _detectionLogs = [];
+
   const processNext = (idx) => {
     if (idx >= xlsFiles.length) {
       document.getElementById('loadingScreen').style.display = 'none';
       updateChips();
       showSuspectWarnings(detectSuspiciousData(parsedMonths));
-      const hasData = Object.keys(parsedMonths).length > 0 || Object.keys(parsedExpenses).length > 0;
+
+      // Habilita botão se tem meses (banco + novos) ou empresa ativa com extras
+      const temMeses = Object.keys(parsedMonths).length > 0;
+      const temExtras = Object.keys(parsedExpenses).length > 0
+        || Object.keys(parsedFaturamento).length > 0;
+      const hasData = temMeses || (_empresaAtiva && temExtras);
       document.getElementById('btnAnalyze').style.display = hasData ? 'flex' : 'none';
+
       if (e.target) e.target.value = '';
       return;
     }
-    document.getElementById('loadingMsg').textContent = `Lendo arquivo ${idx + 1} de ${xlsFiles.length}: ${xlsFiles[idx].name}`;
-    readFile(xlsFiles[idx]).then(() => processNext(idx + 1)).catch(err => {
-      document.getElementById('loadingScreen').style.display = 'none';
-      showErr(err.message);
-      if (e.target) e.target.value = '';
-    });
+    document.getElementById('loadingMsg').textContent =
+      `Lendo arquivo ${idx + 1} de ${xlsFiles.length}: ${xlsFiles[idx].name}`;
+    readFile(xlsFiles[idx])
+      .then(() => processNext(idx + 1))
+      .catch(err => {
+        document.getElementById('loadingScreen').style.display = 'none';
+        showErr(err.message);
+        if (e.target) e.target.value = '';
+      });
   };
   processNext(0);
 }
@@ -902,18 +880,44 @@ function updateChips() {
   }).join('');
 }
 
-function removeMonth(key) {
+async function removeMonth(key) {
+  if (_empresaAtiva) {
+    try {
+      await dbDeletarMes(_empresaAtiva.id, key);
+    } catch (err) {
+      showToast('Erro ao remover mês da nuvem: ' + err.message, true);
+      return;
+    }
+  }
   delete parsedMonths[key]; updateChips();
   showSuspectWarnings(detectSuspiciousData(parsedMonths));
   if (Object.keys(parsedMonths).length === 0 && Object.keys(parsedExpenses).length === 0)
     document.getElementById('btnAnalyze').style.display = 'none';
 }
-function removeExpense(key) {
+
+async function removeExpense(key) {
+  if (_empresaAtiva) {
+    try {
+      await dbDeletarDespesa(_empresaAtiva.id, key);
+    } catch (err) {
+      showToast('Erro ao remover despesa da nuvem: ' + err.message, true);
+      return;
+    }
+  }
   delete parsedExpenses[key]; updateChips();
   if (Object.keys(parsedMonths).length === 0 && Object.keys(parsedExpenses).length === 0)
     document.getElementById('btnAnalyze').style.display = 'none';
 }
-function removeFaturamento(key) {
+
+async function removeFaturamento(key) {
+  if (_empresaAtiva) {
+    try {
+      await dbDeletarFaturamento(_empresaAtiva.id, key);
+    } catch (err) {
+      showToast('Erro ao remover faturamento da nuvem: ' + err.message, true);
+      return;
+    }
+  }
   delete parsedFaturamento[key];
   updateChips();
   if (
@@ -1071,15 +1075,22 @@ function getActivePeriodLabel() {
 }
 
 function getGoalForActivePeriod() {
+  // Meta mensal individual definida pelo botão Metas
   if (activeYear === null && activeMonth >= 0) {
     const key = MONTHS[activeMonth]?.key;
     if (key && _metasMensais[key] && _metasMensais[key] > 0) return _metasMensais[key];
   }
+
+  // Meta anual — só aplica quando está na visão de ano
   if (activeYear !== null) {
     const key = 'year-' + activeYear;
     if (_metasMensais[key] && _metasMensais[key] > 0) return _metasMensais[key];
+    // Usa meta da empresa como meta anual
+    if (CFG.meta > 0) return CFG.meta;
   }
-  return clinicGoal || 0;
+
+  // Na visão mensal sem meta individual — não mostra meta
+  return 0;
 }
 
 // ─── RANGE FILTER ───
@@ -1129,38 +1140,95 @@ function clearRangeFilter() {
 
 // ─── RUN ANALYSIS ───
 function runAnalysis() {
-  if (!Object.keys(parsedMonths).length) { showErr('Nenhuma planilha válida carregada.'); return; }
-  saveConfig();
-  document.getElementById('loadingScreen').style.display = 'flex';
-  setTimeout(() => {
-    MONTHS = Object.values(parsedMonths).sort((a, b) => a.key.localeCompare(b.key)).map(m => {
-      document.getElementById('loadingMsg').textContent = `Calculando ${m.periodo}...`;
-      return computeMonth(m);
+  // Se não tem meses em memória mas tem empresa ativa, tenta carregar do banco
+  if (!Object.keys(parsedMonths).length && _empresaAtiva) {
+    document.getElementById('loadingScreen').style.display = 'flex';
+    document.getElementById('loadingMsg').textContent = 'Carregando dados da empresa...';
+    dbCarregarTudo(_empresaAtiva.id).then(() => {
+      if (!Object.keys(parsedMonths).length) {
+        document.getElementById('loadingScreen').style.display = 'none';
+        showErr('Nenhuma planilha de KPIs encontrada. Suba a planilha de orçamentos primeiro.');
+        return;
+      }
+      _executarAnalise();
+    }).catch(() => {
+      document.getElementById('loadingScreen').style.display = 'none';
+      showErr('Erro ao carregar dados da empresa.');
     });
+    return;
+  }
+
+  if (!Object.keys(parsedMonths).length) {
+    showErr('Nenhuma planilha válida carregada.');
+    return;
+  }
+
+  _executarAnalise();
+}
+
+function _executarAnalise() {
+  // Não chama saveConfig se empresa ativa (preserva meta)
+  if (!_empresaAtiva) saveConfig();
+
+  document.getElementById('loadingScreen').style.display = 'flex';
+
+  setTimeout(() => {
+    MONTHS = Object.values(parsedMonths)
+      .sort((a, b) => a.key.localeCompare(b.key))
+      .map(m => {
+        document.getElementById('loadingMsg').textContent = `Calculando ${m.periodo}...`;
+        return computeMonth(m);
+      });
+
     buildYears();
     const anos = Object.keys(YEARS).map(Number).sort((a, b) => a - b);
     activeYear = String(anos[anos.length - 1]);
     activeMonth = MONTHS.length - 1;
+
     if (anos.length >= 2) {
-      cmpItems = [{ type: 'year', idx: String(anos[anos.length - 2]) }, { type: 'year', idx: String(anos[anos.length - 1]) }];
+      cmpItems = [
+        { type: 'year', idx: String(anos[anos.length - 2]) },
+        { type: 'year', idx: String(anos[anos.length - 1]) }
+      ];
     } else {
       cmpItems = MONTHS.length >= 2
         ? [{ type: 'month', idx: MONTHS.length - 2 }, { type: 'month', idx: MONTHS.length - 1 }]
         : [];
     }
+
     loadLocalState();
-    if (CFG.meta > 0 && clinicGoal === 0) clinicGoal = CFG.meta;
+
+    // Restaura meta — empresa ativa tem prioridade
+    if (_empresaAtiva && _empresaAtiva.meta > 0) {
+      clinicGoal = _empresaAtiva.meta;
+      CFG.meta = _empresaAtiva.meta;
+    } else if (CFG.meta > 0 && clinicGoal === 0) {
+      clinicGoal = CFG.meta;
+    }
+
     render();
     applyConfigToUI();
+
     document.getElementById('loadingScreen').style.display = 'none';
     document.getElementById('uploadScreen').style.display = 'none';
     document.getElementById('dashboard').style.display = 'block';
     document.getElementById('tabCmpBtn').style.display = 'inline-flex';
+
     const tfb = document.getElementById('tabFinBtn');
     if (tfb) tfb.style.display = 'inline-flex';
-    const hasFin = MONTHS.some(m => m.geral.hasDespesas) || Object.keys(parsedExpenses).length > 0;
+
+    const hasFin = MONTHS.some(m => m.geral.hasDespesas)
+      || Object.keys(parsedExpenses).length > 0;
     if (hasFin) _finView = 'year:' + anos[anos.length - 1];
+
     window.scrollTo(0, 0);
+
+    // Salva na nuvem se empresa ativa
+    if (_empresaAtiva) {
+      dbSalvarTudo(_empresaAtiva.id)
+        .then(() => showToast('✅ Dados salvos na nuvem!'))
+        .catch(() => showToast('⚠️ Erro ao salvar na nuvem.', true));
+    }
   }, 100);
 }
 
@@ -2842,9 +2910,9 @@ function renderDespesas() {
         <div style="font-size:14px;color:var(--muted);max-width:480px;line-height:1.7;margin-bottom:24px">
           Para visualizar a análise financeira completa, faça upload de uma planilha de despesas na tela inicial.
         </div>
-        <button onclick="resetDash()" style="margin-top:24px;padding:10px 24px;background:var(--accent);color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">
-          ← Voltar e carregar despesas
-        </button>
+        <button onclick="novoPeriodo()" style="margin-top:24px;padding:10px 24px;background:var(--accent);color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">
+  ← Subir planilha de despesas
+</button>
       </div>`;
     return;
   }
@@ -3742,8 +3810,93 @@ function resetDash() {
   if (notas) notas.remove();
 
   try { localStorage.removeItem('dash_goal'); localStorage.removeItem('dash_cmpItems'); } catch (e) { }
-  loadConfig();
 }
+
+function novoPeriodo() {
+  // Se empresa ativa: NÃO zera parsedMonths/Expenses/Faturamento
+  // Eles serão reaproveitados junto com o que for subido agora
+  if (!_empresaAtiva) {
+    parsedMonths = {};
+    parsedExpenses = {};
+    parsedFaturamento = {};
+  }
+
+  MONTHS = []; YEARS = {};
+  _detectionLogs = [];
+  _finModoReceita = 'aprovados';
+  activeMonth = 0; activeYear = null; cmpItems = []; _finView = null;
+  dentSort = 'taxa'; activeDentFilter = 'all'; clinicGoal = 0;
+  _rangeFilter = null; _rangeFilteredData = null;
+  _notas = {}; _metasMensais = {}; _finMesesSelecionados = new Set();
+
+  [_dentChartInstance, _despChartInst, _trendChartInst,
+   _finYearGrowthChart, _finYearLucroChart, _canalDonutChart,
+   _vendedorTrendChart].forEach(c => {
+    try { if (c) c.destroy(); } catch (e) {}
+  });
+  _dentChartInstance = null; _despChartInst = null; _trendChartInst = null;
+  _finYearGrowthChart = null; _finYearLucroChart = null;
+  _canalDonutChart = null; _vendedorTrendChart = null;
+
+  document.getElementById('dashboard').style.display = 'none';
+  document.getElementById('uploadScreen').style.display = 'flex';
+  document.getElementById('fileInput').value = '';
+  document.getElementById('errBanner').style.display = 'none';
+  document.getElementById('suspectBanner').style.display = 'none';
+  document.getElementById('detectionFeedback').innerHTML = '';
+  document.getElementById('tabCmpBtn').style.display = 'none';
+
+  const tfb = document.getElementById('tabFinBtn');
+  if (tfb) tfb.style.display = 'none';
+  const gi = document.getElementById('goalInput');
+  if (gi) gi.value = '';
+  const gpb = document.getElementById('goalProgressBar');
+  if (gpb) gpb.style.display = 'none';
+  const gpl = document.getElementById('goalProgressLabel');
+  if (gpl) gpl.style.display = 'none';
+  const badge = document.getElementById('rangeActiveBadge');
+  if (badge) badge.style.display = 'none';
+  const slb = document.getElementById('sessionLoadedBadge');
+  if (slb) slb.style.display = 'none';
+  const partial = document.getElementById('partialMonthBanner');
+  if (partial) partial.remove();
+  const notas = document.getElementById('notasPeriodoWrap');
+  if (notas) notas.remove();
+
+  try {
+    localStorage.removeItem('dash_goal');
+    localStorage.removeItem('dash_cmpItems');
+  } catch (e) {}
+
+  // Config card e subtítulo
+  const configCard = document.getElementById('configCard');
+  if (configCard) configCard.style.display = _empresaAtiva ? 'none' : 'block';
+
+  const metrikSub = document.getElementById('metrikSub');
+  if (metrikSub) {
+    metrikSub.textContent = _empresaAtiva
+      ? `📂 Subindo novos dados para: ${_empresaAtiva.nome}`
+      : 'Configure sua clínica e importe os dados para começar';
+  }
+
+  // Restaura meta da empresa ativa
+  if (_empresaAtiva && _empresaAtiva.meta > 0) {
+    clinicGoal = _empresaAtiva.meta;
+    CFG.meta = _empresaAtiva.meta;
+  }
+
+  // Mostra chips e botão se já tem dados em memória
+  if (_empresaAtiva) {
+    updateChips();
+    const temMeses = Object.keys(parsedMonths).length > 0;
+    document.getElementById('btnAnalyze').style.display = temMeses ? 'flex' : 'none';
+    showToast(`📂 Subindo novos dados para: ${_empresaAtiva.nome}`);
+  } else {
+    document.getElementById('monthChips').innerHTML = '';
+    document.getElementById('btnAnalyze').style.display = 'none';
+  }
+}
+
 
 // ═══════════════════════════════════════
 //  TEMPLATES
@@ -5400,3 +5553,98 @@ alert('Erro ao gerar apresentacao: ' + e.message);
 }
 }, 300);
 }
+
+// ═══════════════════════════════════════
+//  PROCESSAR DADOS CARREGADOS DO BANCO
+// ═══════════════════════════════════════
+function processarDadosCarregados() {
+  try {
+    const chaves = Object.keys(parsedMonths).sort();
+    if (chaves.length === 0) return;
+
+    chaves.forEach(chave => {
+      const m = parsedMonths[chave];
+      const resultado = computeMonth(m);
+      if (resultado) {
+        const jaExiste = MONTHS.find(x => x.key === chave);
+        if (!jaExiste) MONTHS.push(resultado);
+      }
+    });
+
+    if (MONTHS.length === 0) return;
+
+    buildYears();
+
+    const anos = Object.keys(YEARS).map(Number).sort((a, b) => a - b);
+    activeYear = String(anos[anos.length - 1]);
+    activeMonth = MONTHS.length - 1;
+
+    if (anos.length >= 2) {
+      cmpItems = [
+        { type: 'year', idx: String(anos[anos.length - 2]) },
+        { type: 'year', idx: String(anos[anos.length - 1]) }
+      ];
+    } else {
+      cmpItems = MONTHS.length >= 2
+        ? [{ type: 'month', idx: MONTHS.length - 2 }, { type: 'month', idx: MONTHS.length - 1 }]
+        : [];
+    }
+
+    loadLocalState();
+    if (CFG.meta > 0 && clinicGoal === 0) clinicGoal = CFG.meta;
+
+    // Mostra badge de dados carregados
+    const slb = document.getElementById('sessionLoadedBadge');
+    if (slb) {
+      slb.style.display = 'flex';
+      slb.textContent = `✅ ${MONTHS.length} ${MONTHS.length === 1 ? 'mês carregado' : 'meses carregados'} — ${_empresaAtiva ? _empresaAtiva.nome : ''}`;
+    }
+
+    // Mostra botão de análise
+    const btnAnalyze = document.getElementById('btnAnalyze');
+    if (btnAnalyze) btnAnalyze.style.display = 'inline-flex';
+
+    // Mostra aba financeiro se tiver despesas
+    const temDesp = Object.keys(parsedExpenses).length > 0;
+    const temFat = Object.keys(parsedFaturamento).length > 0;
+    if (temDesp || temFat) {
+      const tfb = document.getElementById('tabFinBtn');
+      if (tfb) tfb.style.display = 'inline-flex';
+    }
+
+    // Roda análise e mostra dashboard
+    applyConfigToUI();
+    render();
+
+    document.getElementById('loadingScreen').style.display = 'none';
+    document.getElementById('uploadScreen').style.display = 'none';
+    document.getElementById('dashboard').style.display = 'block';
+    document.getElementById('tabCmpBtn').style.display = 'inline-flex';
+
+    const hasFin = MONTHS.some(m => m.geral.hasDespesas) || temDesp;
+    if (hasFin) _finView = 'year:' + anos[anos.length - 1];
+
+    window.scrollTo(0, 0);
+
+  } catch (err) {
+    console.error('Erro ao processar dados carregados:', err);
+    showToast('Erro ao processar dados salvos.', true);
+  }
+}
+
+// ═══════════════════════════════════════
+//  INICIALIZAÇÃO
+// ═══════════════════════════════════════
+(async function init() {
+  loadConfig();
+  applyConfigToUI();
+
+  try {
+    const { data: { session } } = await _sb.auth.getSession();
+    if (session) {
+      await inicializarEmpresas();
+    }
+  } catch (err) {
+    console.error('Erro na inicialização:', err);
+  }
+})();
