@@ -72,8 +72,8 @@ async function entrarEmpresa(empresa) {
 
     const metrikSub = document.getElementById('metrikSub');
     if (metrikSub) metrikSub.textContent = `📂 Subindo dados para: ${empresa.nome}`;
-
-    // Limpa chips visuais
+    const badge = document.getElementById('modotesteBadge');
+    if (badge) badge.style.display = 'none';
     const mc = document.getElementById('monthChips');
     if (mc) mc.innerHTML = '';
     document.getElementById('btnAnalyze').style.display = 'none';
@@ -104,6 +104,8 @@ function entrarModoTeste() {
 
   const metrikSub = document.getElementById('metrikSub');
   if (metrikSub) metrikSub.textContent = 'Modo teste — dados não serão salvos';
+  const badge = document.getElementById('modotesteBadge');
+  if (badge) badge.style.display = 'inline-flex';
 
   // Limpa chips visuais
   const mc = document.getElementById('monthChips');
@@ -117,6 +119,14 @@ function entrarModoTeste() {
 }
 
 // ── Renderizar tela de empresas ──
+// ── Calcula iniciais do nome da empresa pro selo ──
+function getInitials(nome) {
+  if (!nome) return '?';
+  const palavras = nome.trim().split(/\s+/);
+  if (palavras.length === 1) return palavras[0].slice(0, 2).toUpperCase();
+  return (palavras[0][0] + palavras[1][0]).toUpperCase();
+}
+
 function renderTelaEmpresas(empresas) {
   const wrap = document.getElementById('empresasWrap');
   wrap.style.display = 'flex';
@@ -124,81 +134,116 @@ function renderTelaEmpresas(empresas) {
   wrap.style.justifyContent = 'center';
 
   const empresa = empresas.length > 0 ? empresas[0] : null;
+  const divisor = `
+    <div style="display:flex;align-items:center;gap:12px;margin:16px 0;font-size:10px;
+      color:var(--muted);letter-spacing:1px;text-transform:uppercase">
+      <div style="flex:1;height:1px;background:rgba(255,255,255,.06)"></div>ou<div style="flex:1;height:1px;background:rgba(255,255,255,.06)"></div>
+    </div>`;
+  const btnTeste = `
+    <button onclick="entrarModoTeste()"
+      style="width:100%;padding:13px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);
+      border-radius:11px;color:var(--muted2);font-size:13px;font-weight:600;cursor:pointer;transition:.2s;
+      display:flex;align-items:center;justify-content:center;gap:8px;font-family:var(--fb)"
+      onmouseover="this.style.borderColor='var(--accent2)';this.style.color='var(--text)'"
+      onmouseout="this.style.borderColor='rgba(255,255,255,.1)';this.style.color='var(--muted2)'">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3v4M15 3v4M5 21V8h14v13"/><path d="M9 12h6M9 16h6"/></svg>
+      Testar sem salvar
+    </button>`;
 
   wrap.innerHTML = `
     <div style="
-      background:#0f1320;
-      border:1px solid rgba(255,255,255,.1);
-      border-radius:16px;
-      padding:36px 40px;
-      width:100%;
-      max-width:480px;
-      box-shadow:0 24px 64px rgba(0,0,0,.6);
+      padding:1px;border-radius:21px;width:100%;max-width:480px;
+      background:linear-gradient(135deg, rgba(79,156,249,.32), rgba(167,139,250,.14) 45%, rgba(255,255,255,.05) 100%);
+      box-shadow:0 40px 100px -40px rgba(0,0,0,.7);
     ">
-      <div style="text-align:center;margin-bottom:28px">
-        <div style="font-size:32px;margin-bottom:8px">📊</div>
-        <div style="font-size:22px;font-weight:700;color:#e2e8f0;font-family:'Syne',sans-serif">Metrik</div>
-        <div style="font-size:13px;color:#64748b;margin-top:4px">
-          ${empresa ? 'Bem-vindo de volta!' : 'Crie sua empresa para começar'}
-        </div>
-      </div>
+      <div style="background:var(--surface);border-radius:20px;padding:38px 36px">
 
-      ${empresa ? `
-        <div style="
-          background:#151a2a;
-          border:1px solid rgba(79,156,249,.2);
-          border-radius:12px;
-          padding:20px;
-          margin-bottom:16px;
-        ">
-          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
-            <div>
-              <div style="font-size:16px;font-weight:700;color:#e2e8f0">${empresa.nome}</div>
-              <div style="font-size:12px;color:#64748b;margin-top:2px">
+        <div style="text-align:center;margin-bottom:28px">
+          <div style="width:50px;height:50px;margin:0 auto 12px;border-radius:14px;
+            background:linear-gradient(135deg, rgba(79,156,249,.18), rgba(167,139,250,.1));
+            border:1px solid rgba(79,156,249,.3);display:flex;align-items:center;justify-content:center;color:var(--accent)">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19V9M10 19V5M16 19v-7M22 19H2"/></svg>
+          </div>
+          <div style="font-size:22px;font-weight:800;color:var(--text);font-family:var(--fh)">Metrik</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:4px">
+            ${empresa ? 'Bem-vindo de volta' : 'Configure sua primeira empresa'}
+          </div>
+        </div>
+
+        ${empresa ? `
+          <div style="display:flex;align-items:center;gap:14px;background:var(--surface2);
+            border:1px solid rgba(255,255,255,.1);border-radius:14px;padding:18px 20px;margin-bottom:16px">
+            <div style="width:44px;height:44px;border-radius:12px;flex-shrink:0;
+              background:linear-gradient(135deg,var(--accent),var(--accent2));
+              display:flex;align-items:center;justify-content:center;font-family:var(--fh);
+              font-weight:800;color:#fff;font-size:16px">${getInitials(empresa.nome)}</div>
+            <div style="flex:1;min-width:0">
+              <div style="font-family:var(--fh);font-weight:700;font-size:15px;color:var(--text)">${empresa.nome}</div>
+              <div style="font-size:11px;color:var(--muted);margin-top:3px">
                 ${empresa.vendedor || 'Vendedor'} · ${empresa.cliente || 'Cliente'} ·
-                Meta: R$ ${(empresa.meta || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                Meta R$ ${(empresa.meta || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
               </div>
             </div>
-            <div style="display:flex;gap:8px;flex-shrink:0">
+            <div style="display:flex;gap:6px;flex-shrink:0">
               <button onclick="abrirEdicaoEmpresa('${empresa.id}')"
-                style="padding:7px 14px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);
-                color:#94a3b8;border-radius:8px;font-size:12px;cursor:pointer;transition:.2s"
-                onmouseover="this.style.color='#fff'" onmouseout="this.style.color='#94a3b8'">
-                ✏️ Editar
+                style="width:32px;height:32px;border-radius:8px;background:rgba(255,255,255,.04);
+                border:1px solid rgba(255,255,255,.1);display:flex;align-items:center;justify-content:center;
+                color:var(--muted2);cursor:pointer;transition:.2s"
+                onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'"
+                onmouseout="this.style.borderColor='rgba(255,255,255,.1)';this.style.color='var(--muted2)'">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
               </button>
               <button onclick="confirmarDeletarEmpresa('${empresa.id}','${empresa.nome.replace(/'/g, "\\\'")}')"
-                style="padding:7px 14px;background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.25);
-                color:#f87171;border-radius:8px;font-size:12px;cursor:pointer;transition:.2s"
-                onmouseover="this.style.background='rgba(248,113,113,.15)'"
-                onmouseout="this.style.background='rgba(248,113,113,.08)'">
-                🗑️
+                style="width:32px;height:32px;border-radius:8px;background:rgba(255,255,255,.04);
+                border:1px solid rgba(255,255,255,.1);display:flex;align-items:center;justify-content:center;
+                color:var(--muted2);cursor:pointer;transition:.2s"
+                onmouseover="this.style.background='rgba(248,113,113,.1)';this.style.borderColor='rgba(248,113,113,.3)';this.style.color='var(--red)'"
+                onmouseout="this.style.background='rgba(255,255,255,.04)';this.style.borderColor='rgba(255,255,255,.1)';this.style.color='var(--muted2)'">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg>
               </button>
             </div>
           </div>
-          <button onclick='entrarEmpresaById("${empresa.id}")'
-            style="margin-top:14px;width:100%;padding:11px;background:#4f9cf9;border:none;
-            border-radius:8px;color:#fff;font-size:14px;font-weight:600;cursor:pointer;transition:.2s"
-            onmouseover="this.style.opacity='.85'" onmouseout="this.style.opacity='1'">
-            → Entrar
-          </button>
-        </div>
-      ` : `
-        <button onclick="abrirCriarEmpresa()"
-          style="width:100%;padding:12px;background:#4f9cf9;border:none;
-          border-radius:10px;color:#fff;font-size:14px;font-weight:600;cursor:pointer;
-          transition:.2s;margin-bottom:10px"
-          onmouseover="this.style.opacity='.85'" onmouseout="this.style.opacity='1'">
-          + Criar Empresa
-        </button>
-      `}
 
-      <button onclick="entrarModoTeste()"
-        style="width:100%;padding:10px;background:transparent;border:1px solid rgba(255,255,255,.1);
-        border-radius:10px;color:#64748b;font-size:13px;cursor:pointer;transition:.2s;margin-top:${empresa ? '0' : '0'}"
-        onmouseover="this.style.borderColor='rgba(255,255,255,.25)';this.style.color='#94a3b8'"
-        onmouseout="this.style.borderColor='rgba(255,255,255,.1)';this.style.color='#64748b'">
-        🧪 Testar sem salvar
-      </button>
+          <button onclick='entrarEmpresaById("${empresa.id}")'
+            style="width:100%;padding:14px;background:var(--accent);border:none;border-radius:11px;
+            color:#fff;font-family:var(--fh);font-size:14px;font-weight:700;cursor:pointer;transition:.2s;
+            box-shadow:0 10px 24px -8px rgba(79,156,249,.4)"
+            onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='translateY(0)'">
+            Entrar →
+          </button>
+
+          ${divisor}${btnTeste}
+        ` : `
+          <div style="font-family:var(--fh);font-size:10px;font-weight:700;letter-spacing:1.5px;
+            text-transform:uppercase;color:var(--muted);margin-bottom:12px;text-align:center">Pré-visualização</div>
+          <div style="display:flex;align-items:center;gap:14px;background:transparent;
+            border:1.5px dashed rgba(255,255,255,.14);border-radius:14px;padding:18px 20px;margin-bottom:16px">
+            <div style="width:44px;height:44px;border-radius:12px;border:1.5px dashed var(--muted);
+              display:flex;align-items:center;justify-content:center;color:var(--muted);flex-shrink:0">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="11" height="18" rx="1"/><path d="M15 21v-6h4v6"/></svg>
+            </div>
+            <div>
+              <div style="font-family:var(--fh);font-weight:700;font-size:14px;color:var(--muted2)">Sua empresa aparecerá aqui</div>
+              <div style="font-size:11px;color:var(--muted);margin-top:3px">Nome, vendedor, cliente e meta — você define ao criar</div>
+            </div>
+          </div>
+
+          <p style="text-align:center;font-size:12px;color:var(--muted);line-height:1.6;margin-bottom:20px">
+            Leva menos de um minuto. Depois é só <b style="color:var(--accent2);font-weight:600">entrar</b> sempre que quiser ver seus indicadores.
+          </p>
+
+          <button onclick="abrirCriarEmpresa()"
+            style="width:100%;padding:14px;background:var(--accent);border:none;border-radius:11px;
+            color:#fff;font-family:var(--fh);font-size:14px;font-weight:700;cursor:pointer;transition:.2s;
+            box-shadow:0 10px 24px -8px rgba(79,156,249,.4)"
+            onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='translateY(0)'">
+            + Criar empresa
+          </button>
+
+          ${divisor}${btnTeste}
+        `}
+
+      </div>
     </div>
   `;
 }
@@ -215,95 +260,123 @@ function abrirCriarEmpresa() {
   const wrap = document.getElementById('empresasWrap');
   wrap.innerHTML = `
     <div style="
-      background:#0f1320;border:1px solid rgba(255,255,255,.1);border-radius:16px;
-      padding:36px 40px;width:100%;max-width:480px;
-      box-shadow:0 24px 64px rgba(0,0,0,.6);max-height:90vh;overflow-y:auto;
+      padding:1px;border-radius:21px;width:100%;max-width:560px;
+      background:linear-gradient(135deg, rgba(79,156,249,.32), rgba(167,139,250,.14) 45%, rgba(255,255,255,.05) 100%);
+      box-shadow:0 40px 100px -40px rgba(0,0,0,.7);
     ">
-      <div style="font-size:18px;font-weight:700;color:#e2e8f0;margin-bottom:20px">➕ Nova Empresa</div>
+      <div style="background:var(--surface);border-radius:20px;padding:38px 40px;max-height:90vh;overflow-y:auto">
 
-      <div style="display:flex;flex-direction:column;gap:14px">
-        <div>
-          <label style="font-size:11px;color:#64748b;font-weight:600;letter-spacing:.5px;text-transform:uppercase">
-            Nome da Empresa *
-          </label>
-          <input id="novaNome" type="text" placeholder="Ex: Clínica Sorriso"
-            style="width:100%;margin-top:6px;padding:10px 14px;background:#151a2a;
-            border:1px solid rgba(255,255,255,.1);border-radius:8px;color:#e2e8f0;
-            font-size:13px;box-sizing:border-box;outline:none"
-            onfocus="this.style.borderColor='rgba(79,156,249,.5)'"
-            onblur="this.style.borderColor='rgba(255,255,255,.1)'">
+        <div style="display:flex;align-items:center;gap:16px;margin-bottom:14px">
+          <div style="width:46px;height:46px;border-radius:13px;flex-shrink:0;
+            background:linear-gradient(135deg, rgba(79,156,249,.18), rgba(167,139,250,.1));
+            border:1px solid rgba(79,156,249,.3);display:flex;align-items:center;justify-content:center;color:var(--accent)">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="11" height="18" rx="1"/><path d="M9 8h1M9 12h1M9 16h1M15 21v-6h4v6"/></svg>
+          </div>
+          <div>
+            <div style="font-family:var(--fh);font-size:10px;font-weight:700;letter-spacing:2px;
+              text-transform:uppercase;color:var(--accent)">Configuração inicial</div>
+            <div style="font-family:var(--fh);font-size:22px;font-weight:800;letter-spacing:-.3px;color:var(--text);margin-top:2px">Nova empresa</div>
+          </div>
         </div>
-        <div>
-          <label style="font-size:11px;color:#64748b;font-weight:600;letter-spacing:.5px;text-transform:uppercase">
-            Tipo de Vendedor
-            <span style="color:#4f9cf9;font-size:10px;margin-left:4px;text-transform:none;font-weight:400">
-              (ex: Dentista, Vendedor, Consultor)
-            </span>
-          </label>
-          <input id="novaVendedor" type="text" placeholder="Dentista"
-            style="width:100%;margin-top:6px;padding:10px 14px;background:#151a2a;
-            border:1px solid rgba(255,255,255,.1);border-radius:8px;color:#e2e8f0;
-            font-size:13px;box-sizing:border-box;outline:none"
-            onfocus="this.style.borderColor='rgba(79,156,249,.5)'"
-            onblur="this.style.borderColor='rgba(255,255,255,.1)'">
-        </div>
-        <div>
-          <label style="font-size:11px;color:#64748b;font-weight:600;letter-spacing:.5px;text-transform:uppercase">
-            Tipo de Cliente
-            <span style="color:#4f9cf9;font-size:10px;margin-left:4px;text-transform:none;font-weight:400">
-              (ex: Paciente, Cliente, Lead)
-            </span>
-          </label>
-          <input id="novaCliente" type="text" placeholder="Paciente"
-            style="width:100%;margin-top:6px;padding:10px 14px;background:#151a2a;
-            border:1px solid rgba(255,255,255,.1);border-radius:8px;color:#e2e8f0;
-            font-size:13px;box-sizing:border-box;outline:none"
-            onfocus="this.style.borderColor='rgba(79,156,249,.5)'"
-            onblur="this.style.borderColor='rgba(255,255,255,.1)'">
-        </div>
-        <div>
-          <label style="font-size:11px;color:#64748b;font-weight:600;letter-spacing:.5px;text-transform:uppercase">
-            Tipo de Proposta
-            <span style="color:#4f9cf9;font-size:10px;margin-left:4px;text-transform:none;font-weight:400">
-              (ex: Orçamento, Proposta, Contrato)
-            </span>
-          </label>
-          <input id="novaProposta" type="text" placeholder="Orçamento"
-            style="width:100%;margin-top:6px;padding:10px 14px;background:#151a2a;
-            border:1px solid rgba(255,255,255,.1);border-radius:8px;color:#e2e8f0;
-            font-size:13px;box-sizing:border-box;outline:none"
-            onfocus="this.style.borderColor='rgba(79,156,249,.5)'"
-            onblur="this.style.borderColor='rgba(255,255,255,.1)'">
-        </div>
-        <div>
-          <label style="font-size:11px;color:#64748b;font-weight:600;letter-spacing:.5px;text-transform:uppercase">
-            Meta Global de Faturamento
-          </label>
-          <input id="novaMeta" type="text" placeholder="R$ 0,00"
-            style="width:100%;margin-top:6px;padding:10px 14px;background:#151a2a;
-            border:1px solid rgba(255,255,255,.1);border-radius:8px;color:#e2e8f0;
-            font-size:13px;box-sizing:border-box;outline:none"
-            onfocus="this.style.borderColor='rgba(79,156,249,.5)'"
-            onblur="this.style.borderColor='rgba(255,255,255,.1)'">
-        </div>
-      </div>
+        <p style="font-size:13px;color:var(--muted2);line-height:1.7;margin-bottom:28px">
+          Defina como a Metrik vai se referir aos dados da sua planilha — você pode mudar isso depois.
+        </p>
 
-      <div style="display:flex;gap:10px;margin-top:24px">
-        <button onclick="salvarNovaEmpresa()"
-          style="flex:1;padding:11px;background:#4f9cf9;border:none;border-radius:8px;
-          color:#fff;font-size:14px;font-weight:600;cursor:pointer"
-          onmouseover="this.style.opacity='.85'" onmouseout="this.style.opacity='1'">
-          ✓ Criar Empresa
-        </button>
-        <button onclick="inicializarEmpresas()"
-          style="padding:11px 18px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);
-          border-radius:8px;color:#94a3b8;font-size:13px;cursor:pointer"
-          onmouseover="this.style.color='#fff'" onmouseout="this.style.color='#94a3b8'">
-          Cancelar
-        </button>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:26px">
+          <div style="grid-column:1/-1;display:flex;flex-direction:column;gap:7px">
+            <label style="font-size:11px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--muted2)">Nome da Empresa *</label>
+            <input id="novaNome" type="text" placeholder="Ex: Clínica Sorriso"
+              style="background:var(--surface2);border:1px solid rgba(255,255,255,.1);border-radius:10px;
+              padding:11px 14px;font-size:14px;color:var(--text);outline:none;font-family:var(--fb);box-sizing:border-box"
+              onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='rgba(255,255,255,.1)'">
+          </div>
+          <div style="display:flex;flex-direction:column;gap:7px">
+            <label style="font-size:11px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--muted2)">Tipo de Vendedor</label>
+            <input id="novaVendedor" type="text" placeholder="Dentista" oninput="atualizarPreviewEmpresa()"
+              style="background:var(--surface2);border:1px solid rgba(255,255,255,.1);border-radius:10px;
+              padding:11px 14px;font-size:14px;color:var(--text);outline:none;font-family:var(--fb);box-sizing:border-box"
+              onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='rgba(255,255,255,.1)'">
+            <span style="font-size:11px;color:var(--muted)">Ex: Dentista, Consultor</span>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:7px">
+            <label style="font-size:11px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--muted2)">Tipo de Cliente</label>
+            <input id="novaCliente" type="text" placeholder="Paciente" oninput="atualizarPreviewEmpresa()"
+              style="background:var(--surface2);border:1px solid rgba(255,255,255,.1);border-radius:10px;
+              padding:11px 14px;font-size:14px;color:var(--text);outline:none;font-family:var(--fb);box-sizing:border-box"
+              onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='rgba(255,255,255,.1)'">
+            <span style="font-size:11px;color:var(--muted)">Ex: Paciente, Lead</span>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:7px">
+            <label style="font-size:11px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--muted2)">Tipo de Proposta</label>
+            <input id="novaProposta" type="text" placeholder="Orçamento" oninput="atualizarPreviewEmpresa()"
+              style="background:var(--surface2);border:1px solid rgba(255,255,255,.1);border-radius:10px;
+              padding:11px 14px;font-size:14px;color:var(--text);outline:none;font-family:var(--fb);box-sizing:border-box"
+              onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='rgba(255,255,255,.1)'">
+            <span style="font-size:11px;color:var(--muted)">Ex: Orçamento, Contrato</span>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:7px">
+            <label style="font-size:11px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--muted2)">Meta Global de Faturamento</label>
+            <input id="novaMeta" type="text" placeholder="R$ 0,00"
+              style="background:var(--surface2);border:1px solid rgba(255,255,255,.1);border-radius:10px;
+              padding:11px 14px;font-size:14px;color:var(--text);outline:none;font-family:var(--fb);box-sizing:border-box"
+              onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='rgba(255,255,255,.1)'">
+          </div>
+        </div>
+
+        <div style="background:rgba(79,156,249,.05);border:1px solid rgba(79,156,249,.18);
+          border-radius:14px;padding:18px 20px;margin-bottom:26px">
+          <div style="font-family:var(--fh);font-size:10px;font-weight:700;letter-spacing:1.5px;
+            text-transform:uppercase;color:var(--accent);margin-bottom:14px">Como vai aparecer no sistema</div>
+          <div style="display:flex;align-items:center;gap:10px;font-size:12px;color:var(--muted2);margin-bottom:9px">
+            <span id="pvVendedor" style="font-family:var(--fh);font-size:11px;font-weight:700;
+              background:rgba(79,156,249,.14);border:1px solid rgba(79,156,249,.3);color:var(--accent);
+              padding:3px 10px;border-radius:20px;flex-shrink:0">Vendedor</span>
+            substitui "vendedor" nos filtros e gráficos
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;font-size:12px;color:var(--muted2);margin-bottom:9px">
+            <span id="pvCliente" style="font-family:var(--fh);font-size:11px;font-weight:700;
+              background:rgba(79,156,249,.14);border:1px solid rgba(79,156,249,.3);color:var(--accent);
+              padding:3px 10px;border-radius:20px;flex-shrink:0">Cliente</span>
+            substitui "cliente" em toda a interface
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;font-size:12px;color:var(--muted2)">
+            <span id="pvProposta" style="font-family:var(--fh);font-size:11px;font-weight:700;
+              background:rgba(79,156,249,.14);border:1px solid rgba(79,156,249,.3);color:var(--accent);
+              padding:3px 10px;border-radius:20px;flex-shrink:0">Orçamento</span>
+            substitui "proposta" nos KPIs de conversão
+          </div>
+        </div>
+
+        <div style="display:flex;gap:10px">
+          <button onclick="salvarNovaEmpresa()"
+            style="flex:2;padding:14px;background:var(--accent);border:none;border-radius:11px;
+            color:#fff;font-family:var(--fh);font-weight:700;font-size:13px;cursor:pointer;transition:.2s;
+            box-shadow:0 10px 24px -8px rgba(79,156,249,.4)"
+            onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='translateY(0)'">
+            ✓ Criar Empresa
+          </button>
+          <button onclick="inicializarEmpresas()"
+            style="flex:1;padding:14px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);
+            border-radius:11px;color:var(--muted2);font-size:13px;font-weight:600;cursor:pointer;transition:.2s;font-family:var(--fb)"
+            onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--muted2)'">
+            Cancelar
+          </button>
+        </div>
+
       </div>
     </div>
   `;
+  atualizarPreviewEmpresa();
+}
+
+// ── Atualiza o preview ao vivo conforme o usuário digita ──
+function atualizarPreviewEmpresa() {
+  const v = document.getElementById('novaVendedor')?.value?.trim() || 'Vendedor';
+  const c = document.getElementById('novaCliente')?.value?.trim() || 'Cliente';
+  const p = document.getElementById('novaProposta')?.value?.trim() || 'Orçamento';
+  const pv = document.getElementById('pvVendedor'); if (pv) pv.textContent = v;
+  const pc = document.getElementById('pvCliente'); if (pc) pc.textContent = c;
+  const pp = document.getElementById('pvProposta'); if (pp) pp.textContent = p;
 }
 
 // ── Salvar nova empresa ──

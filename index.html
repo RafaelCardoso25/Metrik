@@ -35,143 +35,165 @@
   <!-- ═══════════ DROP PORTAL ═══════════ -->
   <div id="dropPortal" class="drop-portal"></div>
 
-  <!-- ═══════════ UPLOAD SCREEN ═══════════ -->
-  <div id="uploadScreen" class="upload-screen-new">
-    <div class="metrik-upload-wrap">
+<!-- ═══════════ UPLOAD SCREEN ═══════════ -->
+<div id="uploadScreen" class="upload-screen-new">
+  <div class="metrik-upload-wrap">
 
-      <div class="metrik-header">
-        <span class="metrik-logo">📊</span>
-        <div class="metrik-title">Metrik</div>
-        <div class="metrik-sub" id="metrikSub">Configure sua clínica e importe os dados para começar</div>
+    <div class="metrik-header">
+      <div class="metrik-logo-mark">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 19V9M10 19V5M16 19v-7M22 19H2"/>
+        </svg>
+      </div>
+      <div class="metrik-title">Metrik</div>
+      <div class="metrik-sub" id="metrikSub">Configure sua empresa e importe os dados para começar</div>
+      <div id="modotesteBadge" class="up-badge" style="display:none">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 3 7v6c0 5 4 8 9 9 5-1 9-4 9-9V7z"/></svg>
+        Modo teste — dados não serão salvos
+      </div>
+    </div>
+
+    <!-- Config -->
+    <div class="config-card" id="configCard">
+      <div class="config-card-title">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>
+        Configuração da Empresa
+      </div>
+      <div class="config-grid">
+        <div class="config-field full">
+          <label class="config-label">Nome da Empresa</label>
+          <input type="text" id="cfgEmpresa" class="config-input" placeholder="Ex: Clínica Sorriso">
+        </div>
+        <div class="config-field">
+          <label class="config-label">Tipo de Vendedor</label>
+          <select id="cfgVendedor" class="config-select" onchange="handleSelectOther(this,'cfgVendedorCustom')">
+            <option value="Dentista">Dentista</option>
+            <option value="Vendedor">Vendedor</option>
+            <option value="Consultor">Consultor</option>
+            <option value="Corretor">Corretor</option>
+            <option value="Médico">Médico</option>
+            <option value="outro">Outro...</option>
+          </select>
+          <input type="text" id="cfgVendedorCustom" class="config-custom-input" placeholder="Digite o nome">
+        </div>
+        <div class="config-field">
+          <label class="config-label">Tipo de Cliente</label>
+          <select id="cfgCliente" class="config-select" onchange="handleSelectOther(this,'cfgClienteCustom')">
+            <option value="Paciente">Paciente</option>
+            <option value="Cliente">Cliente</option>
+            <option value="Lead">Lead</option>
+            <option value="outro">Outro...</option>
+          </select>
+          <input type="text" id="cfgClienteCustom" class="config-custom-input" placeholder="Digite o nome">
+        </div>
+        <div class="config-field">
+          <label class="config-label">Tipo de Proposta</label>
+          <select id="cfgProposta" class="config-select" onchange="handleSelectOther(this,'cfgPropostaCustom')">
+            <option value="Orçamento">Orçamento</option>
+            <option value="Proposta">Proposta</option>
+            <option value="Contrato">Contrato</option>
+            <option value="outro">Outro...</option>
+          </select>
+          <input type="text" id="cfgPropostaCustom" class="config-custom-input" placeholder="Digite o nome">
+        </div>
+        <div class="config-field">
+          <label class="config-label">Meta Global de Faturamento</label>
+          <input type="text" id="cfgMeta" class="config-input" placeholder="R$ 0,00">
+        </div>
+      </div>
+    </div>
+
+    <!-- Import -->
+    <div class="import-card">
+      <div class="import-card-title">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19V9M10 19V5M16 19v-7M22 19H2"/></svg>
+        Importar Dados
       </div>
 
-      <!-- Config -->
-      <div class="config-card" id="configCard">
-        <div class="config-card-title">⚙️ Configuração da Empresa</div>
-        <div class="config-grid">
-          <div class="config-field full">
-            <label class="config-label">Nome da Empresa</label>
-            <input type="text" id="cfgEmpresa" class="config-input" placeholder="Ex: Clínica Sorriso">
-          </div>
-          <div class="config-field">
-            <label class="config-label">Tipo de Vendedor</label>
-            <select id="cfgVendedor" class="config-select" onchange="handleSelectOther(this,'cfgVendedorCustom')">
-              <option value="Dentista">Dentista</option>
-              <option value="Vendedor">Vendedor</option>
-              <option value="Consultor">Consultor</option>
-              <option value="Corretor">Corretor</option>
-              <option value="Médico">Médico</option>
-              <option value="outro">Outro...</option>
-            </select>
-            <input type="text" id="cfgVendedorCustom" class="config-custom-input" placeholder="Digite o nome">
-          </div>
-          <div class="config-field">
-            <label class="config-label">Tipo de Cliente</label>
-            <select id="cfgCliente" class="config-select" onchange="handleSelectOther(this,'cfgClienteCustom')">
-              <option value="Paciente">Paciente</option>
-              <option value="Cliente">Cliente</option>
-              <option value="Lead">Lead</option>
-              <option value="outro">Outro...</option>
-            </select>
-            <input type="text" id="cfgClienteCustom" class="config-custom-input" placeholder="Digite o nome">
-          </div>
-          <div class="config-field">
-            <label class="config-label">Tipo de Proposta</label>
-            <select id="cfgProposta" class="config-select" onchange="handleSelectOther(this,'cfgPropostaCustom')">
-              <option value="Orçamento">Orçamento</option>
-              <option value="Proposta">Proposta</option>
-              <option value="Contrato">Contrato</option>
-              <option value="outro">Outro...</option>
-            </select>
-            <input type="text" id="cfgPropostaCustom" class="config-custom-input" placeholder="Digite o nome">
-          </div>
-          <div class="config-field">
-            <label class="config-label">Meta Global de Faturamento</label>
-            <input type="text" id="cfgMeta" class="config-input" placeholder="R$ 0,00">
-          </div>
-        </div>
+      <div class="drop-zone-new" id="dropZone" onclick="document.getElementById('fileInput').click()">
+        <span class="drop-zone-icon">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M7 18a4 4 0 0 1-1-7.9A5 5 0 0 1 16 8a4.5 4.5 0 0 1 1 8.9"/>
+            <path d="M12 12v6M9.5 14.5 12 12l2.5 2.5"/>
+          </svg>
+        </span>
+        <div class="drop-zone-text">Arraste os arquivos ou clique para selecionar</div>
+        <div class="drop-zone-sub">Excel (.xlsx, .xls)</div>
       </div>
+      <input type="file" id="fileInput" multiple accept=".xlsx,.xls" onchange="handleFiles(event)">
 
-      <!-- Import -->
-      <div class="import-card">
-        <div class="import-card-title">📂 Importar Dados</div>
-
-        <div class="drop-zone-new" id="dropZone" onclick="document.getElementById('fileInput').click()">
-          <span class="drop-zone-icon">📁</span>
-          <div class="drop-zone-text">Arraste os arquivos ou clique para selecionar</div>
-          <div class="drop-zone-sub">Excel (.xlsx, .xls)</div>
-        </div>
-        <input type="file" id="fileInput" multiple accept=".xlsx,.xls" onchange="handleFiles(event)">
-
-        <div class="import-btns">
-          <button class="import-btn budget" onclick="document.getElementById('fileInput').click()">
-            📋 Orçamentos
-          </button>
-          <button class="import-btn expense" onclick="document.getElementById('fileInput').click()">
-            💰 Despesas
-          </button>
-          <button class="import-btn purple" onclick="document.getElementById('fileInput').click()">
-            💵 Faturamento Real
-          </button>
-        </div>
-
-        <div class="columns-hint">
-          <div class="columns-hint-title">Colunas esperadas na planilha de orçamentos</div>
-          <div class="columns-list">
-            <span class="col-tag col-required" id="colVendedor">Dentista (obrigatório)</span>
-            <span class="col-tag col-required">Total Líquido (obrigatório)</span>
-            <span class="col-tag col-required">Situação (obrigatório)</span>
-            <span class="col-tag col-optional" id="colCliente">Paciente (opcional)</span>
-            <span class="col-tag col-optional">Emissão (opcional)</span>
-            <span class="col-tag col-optional">Aprovação (opcional)</span>
-            <span class="col-tag col-optional">Campanha (opcional)</span>
-            <span class="col-tag col-optional">Telefone (opcional)</span>
-          </div>
-        </div>
-
-        <div class="template-section">
-          <div class="template-title">📥 Baixar Templates</div>
-          <div class="template-cards">
-            <div class="template-card">
-              <span class="template-icon">📋</span>
-              <div class="template-info">
-                <div class="template-name">Template de Orçamentos</div>
-                <div class="template-desc">Modelo com todas as colunas necessárias para importar orçamentos mensais</div>
-              </div>
-              <button class="template-btn" onclick="downloadTemplate('orcamentos')">Baixar</button>
-            </div>
-            <div class="template-card">
-              <span class="template-icon">💰</span>
-              <div class="template-info">
-                <div class="template-name">Template de Despesas</div>
-                <div class="template-desc">Modelo com despesas mensais para análise financeira e margem de lucro</div>
-              </div>
-              <button class="template-btn" onclick="downloadTemplate('despesas')">Baixar</button>
-            </div>
-            <div class="template-card" style="border-color:rgba(167,139,250,.25);background:rgba(167,139,250,.04)">
-              <span class="template-icon">💵</span>
-              <div class="template-info">
-                <div class="template-name">Template de Faturamento Real</div>
-                <div class="template-desc">Modelo para informar o caixa real recebido por mês</div>
-              </div>
-              <button class="template-btn" style="background:var(--accent2)" onclick="downloadTemplate('faturamento')">Baixar</button>
-            </div>
-          </div>
-        </div>
-
-        <div id="monthChips" class="month-chips"></div>
-        <div id="sessionLoadedBadge"></div>
-        <div id="detectionFeedback"></div>
-        <div id="errBanner"></div>
-        <div id="suspectBanner"></div>
-
-        <button id="btnAnalyze" class="btn-primary btn-analyze" onclick="runAnalysis()">
-          🚀 Analisar Dados
+      <div class="import-btns">
+        <button class="import-btn budget" onclick="document.getElementById('fileInput').click()">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="1"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>
+          Orçamentos
+        </button>
+        <button class="import-btn expense" onclick="document.getElementById('fileInput').click()">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 19V5h14v14M9 9h6M9 13h6"/></svg>
+          Despesas
+        </button>
+        <button class="import-btn purple" onclick="document.getElementById('fileInput').click()">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l5-5 4 4 8-9"/><path d="M16 7h4v4"/></svg>
+          Faturamento Real
         </button>
       </div>
 
+      <div class="columns-hint">
+        <div class="columns-hint-title">Colunas esperadas na planilha de orçamentos</div>
+        <div class="columns-list">
+          <span class="col-tag col-required" id="colVendedor">Dentista (obrigatório)</span>
+          <span class="col-tag col-required">Total Líquido (obrigatório)</span>
+          <span class="col-tag col-required">Situação (obrigatório)</span>
+          <span class="col-tag col-optional" id="colCliente">Paciente (opcional)</span>
+          <span class="col-tag col-optional">Emissão (opcional)</span>
+          <span class="col-tag col-optional">Aprovação (opcional)</span>
+          <span class="col-tag col-optional">Campanha (opcional)</span>
+          <span class="col-tag col-optional">Telefone (opcional)</span>
+        </div>
+      </div>
+
+      <div class="template-section">
+        <div class="template-title">Baixar Templates</div>
+        <div class="template-cards">
+          <div class="template-card">
+            <span class="template-icon">📋</span>
+            <div class="template-info">
+              <div class="template-name">Template de Orçamentos</div>
+              <div class="template-desc">Modelo com todas as colunas necessárias para importar orçamentos mensais</div>
+            </div>
+            <button class="template-btn" onclick="downloadTemplate('orcamentos')">Baixar</button>
+          </div>
+          <div class="template-card">
+            <span class="template-icon">💰</span>
+            <div class="template-info">
+              <div class="template-name">Template de Despesas</div>
+              <div class="template-desc">Modelo com despesas mensais para análise financeira e margem de lucro</div>
+            </div>
+            <button class="template-btn" onclick="downloadTemplate('despesas')">Baixar</button>
+          </div>
+          <div class="template-card" style="border-color:rgba(167,139,250,.25);background:rgba(167,139,250,.04)">
+            <span class="template-icon">💵</span>
+            <div class="template-info">
+              <div class="template-name">Template de Faturamento Real</div>
+              <div class="template-desc">Modelo para informar o caixa real recebido por mês</div>
+            </div>
+            <button class="template-btn" style="background:var(--accent2)" onclick="downloadTemplate('faturamento')">Baixar</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="monthChips" class="month-chips"></div>
+      <div id="sessionLoadedBadge"></div>
+      <div id="detectionFeedback"></div>
+      <div id="errBanner"></div>
+      <div id="suspectBanner"></div>
+
+      <button id="btnAnalyze" class="btn-primary btn-analyze" onclick="runAnalysis()">
+        🚀 Analisar Dados
+      </button>
     </div>
+
   </div>
+</div>
 
   <!-- ═══════════ DASHBOARD ═══════════ -->
   <div id="dashboard">
