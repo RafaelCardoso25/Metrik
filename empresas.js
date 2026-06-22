@@ -103,7 +103,7 @@ function entrarModoTeste() {
   if (configCard) configCard.style.display = 'block';
 
   const metrikSub = document.getElementById('metrikSub');
-  if (metrikSub) metrikSub.textContent = 'Modo teste — dados não serão salvos';
+  if (metrikSub) metrikSub.textContent = 'Explore o sistema sem salvar nada na nuvem';
   const badge = document.getElementById('modotesteBadge');
   if (badge) badge.style.display = 'inline-flex';
 
@@ -936,6 +936,8 @@ async function subirNovaPlanilhaEmpresa(empresaId) {
 
   const metrikSub = document.getElementById('metrikSub');
   if (metrikSub) metrikSub.textContent = `📂 Subindo novos dados para: ${empresa.nome}`;
+  const badge = document.getElementById('modotesteBadge');
+  if (badge) badge.style.display = 'none';
 
   // Mostra chips dos meses já carregados
   updateChips();
@@ -953,8 +955,70 @@ async function subirNovaPlanilhaEmpresa(empresaId) {
 
 // ── Confirmar deleção ──
 function confirmarDeletarEmpresa(empresaId, nome) {
-  if (!confirm(`Tem certeza que deseja excluir "${nome}"?\n\nTodos os dados serão apagados permanentemente.`)) return;
-  deletarEmpresa(empresaId);
+  // Remove overlay anterior se existir
+  const old = document.getElementById('deleteEmpresaOverlay');
+  if (old) old.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'deleteEmpresaOverlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:10000;display:flex;align-items:center;justify-content:center;padding:20px';
+  overlay.innerHTML = `
+    <div style="
+      padding:1px;border-radius:20px;width:100%;max-width:420px;
+      background:linear-gradient(135deg,rgba(248,113,113,.45),rgba(248,113,113,.15) 55%,rgba(255,255,255,.05) 100%);
+      box-shadow:0 40px 80px -20px rgba(0,0,0,.9);
+    ">
+      <div style="background:var(--surface);border-radius:19px;padding:38px;text-align:center">
+        <div style="width:52px;height:52px;margin:0 auto 18px;border-radius:14px;
+          background:rgba(248,113,113,.1);border:1px solid rgba(248,113,113,.35);
+          display:flex;align-items:center;justify-content:center;color:var(--red)">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/>
+          </svg>
+        </div>
+        <div style="font-family:var(--fh);font-size:18px;font-weight:800;margin-bottom:8px;color:var(--text)">
+          Excluir empresa?
+        </div>
+        <div style="font-size:13px;color:var(--muted2);line-height:1.6;margin-bottom:6px">
+          Você está prestes a excluir permanentemente
+        </div>
+        <div style="font-family:var(--fh);font-size:15px;font-weight:700;color:var(--red);margin-bottom:10px">
+          ${nome}
+        </div>
+        <div style="font-size:12px;color:var(--muted);line-height:1.6;margin-bottom:28px">
+          Todos os meses, despesas e faturamentos serão apagados.<br>
+          Essa ação <b style="color:var(--red)">não pode ser desfeita</b>.
+        </div>
+        <div style="display:flex;gap:10px">
+          <button id="btnConfirmarDelete"
+            style="flex:1;padding:13px;background:var(--red);border:none;border-radius:11px;
+            color:#fff;font-family:var(--fh);font-weight:700;font-size:13px;cursor:pointer;transition:.2s;
+            box-shadow:0 8px 20px -8px rgba(248,113,113,.5)"
+            onmouseover="this.style.transform='translateY(-1px)'"
+            onmouseout="this.style.transform='translateY(0)'">
+            Sim, excluir empresa
+          </button>
+          <button id="btnCancelarDelete"
+            style="flex:1;padding:13px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);
+            border-radius:11px;color:var(--muted2);font-size:13px;font-weight:600;cursor:pointer;
+            transition:.2s;font-family:var(--fb)"
+            onmouseover="this.style.color='var(--text)'"
+            onmouseout="this.style.color='var(--muted2)'">
+            Cancelar
+          </button>
+        </div>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+
+  document.getElementById('btnConfirmarDelete').addEventListener('click', () => {
+    overlay.remove();
+    deletarEmpresa(empresaId);
+  });
+  document.getElementById('btnCancelarDelete').addEventListener('click', () => overlay.remove());
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
 }
 
 async function deletarEmpresa(empresaId) {
