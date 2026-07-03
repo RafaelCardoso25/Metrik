@@ -236,7 +236,7 @@ const KPI_TOOLTIPS = {
   'Potencial Recuperável': 'Estimativa de 30% da receita perdida recuperável com follow-up estruturado.',
   'Total Orçamentos': 'Quantidade total de orçamentos emitidos no período.',
   'Cancelamentos': 'Orçamentos onde o paciente desistiu ativamente do tratamento.',
-  'Score de Saúde': 'Índice de 0 a 100 baseado em conversão, concentração, canais e perda de receita.',
+  'Score de Saúde': 'Índice de 0 a 100 baseado em conversão, margem, crescimento de faturamento e ticket médio, redução de despesas, canais e recuperação de receita. Veja o detalhamento no resumo executivo.',
 };
 
 // ═══════════════════════════════════════
@@ -936,7 +936,7 @@ function showErr(msg) {
 // ═══════════════════════════════════════
 //  COMPUTE
 // ═══════════════════════════════════════
-function computeMonth(data) {
+function computeMonth(data, prev) {
   const { records, periodo, mes, ano, key } = data;
   const active = records.filter(r => r.situacao !== 'Cancelado');
   const cancelados = records.filter(r => r.situacao === 'Cancelado');
@@ -1008,28 +1008,70 @@ function computeMonth(data) {
     cancByDent[r.dentista].count++; cancByDent[r.dentista].valor += r.total;
   }
   const topVencidos = [...vencidos].sort((a, b) => b.total - a.total).slice(0, 8);
-  const score = calcScore({ geral, dentistas, canais });
-  return { key, periodo, mes, ano, geral, dentistas, canais, cancelados, cancByDent: Object.values(cancByDent), topVencidos, score };
+  const sc = calcScore({ geral, dentistas, canais, prevGeral: prev ? prev.geral : null });
+  return { key, periodo, mes, ano, geral, dentistas, canais, cancelados, cancByDent: Object.values(cancByDent), topVencidos, score: sc.score, scoreParts: sc.parts };
 }
 
-function calcScore({ geral, dentistas, canais }) {
+function calcScore({ geral, dentistas, canais, prevGeral }) {
   const hm = geral.margem !== null;
-  let s = 0;
-  const cm = hm ? 30 : 40;
-  s += clamp((geral.taxa / 100) * cm, 0, cm);
-  if (hm) s += clamp((geral.margem / 20) * 20, 0, 20);
-  const cc = hm ? 15 : 20;
+  const parts = [];
+  const add = (label, pts, max, hint) => parts.push({ label, pts: clamp(+pts.toFixed(1), 0, max), max, hint });
+
+  // Crescimento → fator [0..1]: neutro (0.5) quando estável, cheio a +20%, zero a -20%.
+  // Sem período anterior, retorna neutro para não punir o primeiro período.
+  const growthFactor = (cur, prev) => {
+    if (prev == null || prev <= 0) return 0.5;
+    return clamp(0.5 + ((cur - prev) / prev / 0.20) * 0.5, 0, 1);
+  };
+  // Redução de despesas → invertido: cair é bom.
+  const reductionFactor = (cur, prev) => {
+    if (prev == null || prev <= 0) return 0.5;
+    return clamp(0.5 + ((prev - cur) / prev / 0.20) * 0.5, 0, 1);
+  };
+
+  // ── Componentes operacionais ──
+  const convMax = hm ? 22 : 30;
+  add('Conversão', (geral.taxa / 100) * convMax, convMax, `${geral.taxa}% dos orçamentos aprovados.`);
+
+  if (hm) add('Margem líquida', (geral.margem / 20) * 13, 13, `Margem de ${geral.margem}% (meta: 20%+).`);
+
+  const concMax = 5;
   const vals = dentistas.map(d => d.valor_aprovado).filter(v => v > 0);
+  let concPts = concMax / 2;
   if (vals.length > 1) {
     const mx = Math.max(...vals);
     const total = vals.reduce((a, b) => a + b, 0) || 1;
-    s += clamp((1 - mx / total) * cc, 0, cc);
-  } else { s += cc / 2; }
-  const ca = hm ? 15 : 20;
+    concPts = (1 - mx / total) * concMax;
+  }
+  add('Distribuição da receita', concPts, concMax, 'Quanto mais distribuída entre os vendedores, melhor.');
+
+  const canMax = hm ? 10 : 15;
   const canaisValidos = canais.filter(c => c.taxa >= 70 && c.canal !== 'NAO INFORMADO');
-  s += clamp(canaisValidos.length / Math.max(canais.length, 1) * ca, 0, ca);
-  s += clamp((1 - (geral.orcado > 0 ? geral.perdido / geral.orcado : 0)) * 20, 0, 20);
-  return Math.round(clamp(s, 0, 100));
+  add('Qualidade dos canais', canaisValidos.length / Math.max(canais.length, 1) * canMax, canMax, 'Proporção de canais com conversão ≥ 70%.');
+
+  const perdaMax = hm ? 15 : 20;
+  add('Recuperação de receita', (1 - (geral.orcado > 0 ? geral.perdido / geral.orcado : 0)) * perdaMax, perdaMax, 'Quanto menos orçamentos vencidos, melhor.');
+
+  // ── Componentes de crescimento (vs período anterior) ──
+  const temPrev = !!prevGeral;
+  const fatMax = hm ? 15 : 18;
+  add('Crescimento do faturamento', growthFactor(geral.aprovado, prevGeral && prevGeral.aprovado) * fatMax, fatMax,
+    temPrev ? 'Receita faturada vs período anterior.' : 'Sem período anterior para comparar — pontuação neutra.');
+
+  const curTicket = geral.aprovados > 0 ? geral.aprovado / geral.aprovados : 0;
+  const prevTicket = prevGeral && prevGeral.aprovados > 0 ? prevGeral.aprovado / prevGeral.aprovados : null;
+  const tkMax = hm ? 8 : 12;
+  add('Crescimento do ticket médio', growthFactor(curTicket, prevTicket) * tkMax, tkMax,
+    temPrev ? 'Ticket médio vs período anterior.' : 'Sem período anterior para comparar — pontuação neutra.');
+
+  if (hm) {
+    const prevDesp = prevGeral && prevGeral.margem !== null ? prevGeral.despesas : null;
+    add('Redução de despesas', reductionFactor(geral.despesas, prevDesp) * 12, 12,
+      (temPrev && prevDesp != null) ? 'Despesas vs período anterior (cair é melhor).' : 'Sem base de comparação — pontuação neutra.');
+  }
+
+  const total = parts.reduce((s, p) => s + p.pts, 0);
+  return { score: Math.round(clamp(total, 0, 100)), parts };
 }
 
 function computeYear(ano) {
@@ -1039,7 +1081,8 @@ function computeYear(ano) {
   if (!allRecords.length) return null;
   const data = computeMonth({ records: allRecords, periodo: String(ano), mes: null, ano, key: 'year-' + ano });
   data.periodo = String(ano); data.key = 'year-' + ano; data.isYear = true; data.months = months;
-  data.score = calcScore({ geral: data.geral, dentistas: data.dentistas, canais: data.canais });
+  const scYear = calcScore({ geral: data.geral, dentistas: data.dentistas, canais: data.canais, prevGeral: null });
+  data.score = scYear.score; data.scoreParts = scYear.parts;
   return data;
 }
 function buildYears() {
@@ -1173,12 +1216,15 @@ function _executarAnalise() {
   document.getElementById('loadingScreen').style.display = 'flex';
 
   setTimeout(() => {
-    MONTHS = Object.values(parsedMonths)
-      .sort((a, b) => a.key.localeCompare(b.key))
-      .map(m => {
-        document.getElementById('loadingMsg').textContent = `Calculando ${m.periodo}...`;
-        return computeMonth(m);
-      });
+    const _sortedRaw = Object.values(parsedMonths).sort((a, b) => a.key.localeCompare(b.key));
+    MONTHS = [];
+    let _prevM = null;
+    for (const m of _sortedRaw) {
+      document.getElementById('loadingMsg').textContent = `Calculando ${m.periodo}...`;
+      const _cm = computeMonth(m, _prevM);
+      MONTHS.push(_cm);
+      _prevM = _cm;
+    }
 
     buildYears();
     const anos = Object.keys(YEARS).map(Number).sort((a, b) => a - b);
@@ -1411,6 +1457,40 @@ function renderExec(M, prev) {
       </div>
       <div class="exec-grade" style="color:${scoreColor}">${scoreGrade}</div>
     </div>`;
+  renderScoreBreakdown(M);
+}
+
+function renderScoreBreakdown(M) {
+  const el = document.getElementById('scoreBreakdown');
+  if (!el) return;
+  const parts = M.scoreParts || [];
+  if (!parts.length) { el.innerHTML = ''; return; }
+  const rows = parts.map(p => {
+    const pctv = p.max > 0 ? Math.round(p.pts / p.max * 100) : 0;
+    const col = pctv >= 75 ? 'var(--green)' : pctv >= 45 ? 'var(--yellow)' : 'var(--red)';
+    return `
+      <div style="margin-bottom:12px">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;font-size:13px;margin-bottom:5px">
+          <span style="color:var(--text)">${p.label}</span>
+          <span style="font-family:var(--mono);font-size:12px;color:${col}">${p.pts.toFixed(1)}<span style="color:var(--muted)">/${p.max}</span></span>
+        </div>
+        <div style="height:6px;background:var(--raise);border-radius:4px;overflow:hidden">
+          <div style="height:100%;width:${pctv}%;background:${col};border-radius:4px"></div>
+        </div>
+        ${p.hint ? `<div style="font-size:11px;color:var(--muted);margin-top:4px">${p.hint}</div>` : ''}
+      </div>`;
+  }).join('');
+  el.innerHTML = `
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r);overflow:hidden">
+      <button type="button" onclick="var b=this.parentNode.querySelector('.score-bd-body');var open=b.style.display!=='none';b.style.display=open?'none':'block';this.querySelector('.score-bd-caret').textContent=open?'▸':'▾'"
+        style="width:100%;text-align:left;background:none;border:none;cursor:pointer;padding:14px 20px;display:flex;align-items:center;justify-content:space-between;font-family:var(--fh);font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted)">
+        <span>📊 Detalhamento do Score — ${M.score}/100</span>
+        <span class="score-bd-caret">▾</span>
+      </button>
+      <div class="score-bd-body" style="display:block;padding:0 20px">
+        <div style="padding-bottom:16px;padding-top:4px">${rows}</div>
+      </div>
+    </div>`;
 }
 
 function setGoal(raw) {
@@ -1510,7 +1590,6 @@ function generateInsights(M) {
   const cLabel = CFG.cliente || 'Cliente';
   const piorTaxa = [...M.dentistas].filter(d => d.total >= 5).sort((a, b) => a.taxa - b.taxa)[0];
   const maiorPerda = [...M.dentistas].sort((a, b) => b.valor_perdido - a.valor_perdido)[0];
-  const melhorFat = [...M.dentistas].sort((a, b) => b.valor_aprovado - a.valor_aprovado)[0];
   const upsell = [...M.dentistas].filter(d => d.taxa >= 85 && d.ticket_medio < tC * .6 && d.total >= 5);
   const ni = M.canais.find(c => c.canal === 'NAO INFORMADO');
   const canalRuim = [...M.canais].filter(c => c.total >= 5 && c.taxa < 50 && c.canal !== 'NAO INFORMADO').sort((a, b) => a.taxa - b.taxa)[0];
@@ -1530,7 +1609,6 @@ function generateInsights(M) {
   if (ni && ni.total > 8) ins.push({ t: 'w', i: '📋', l: 'Dados de Marketing Incompletos', txt: `${ni.total} orçamentos sem canal (${pct(ni.total, g.total).toFixed(0)}%).`, sub: 'Tornar campo obrigatório.' });
   if (canalRuim) ins.push({ t: 'a', i: '📍', l: `Canal Ineficiente: ${canalDisplay(canalRuim.canal)}`, txt: `${canalRuim.taxa}% de conversão com ${canalRuim.total} orçamentos.`, sub: 'Revisar abordagem e qualificação.' });
   if (melhorCanal && melhorCanal.taxa >= 80) ins.push({ t: 'g', i: '🔄', l: `Melhor Canal: ${canalDisplay(melhorCanal.canal)}`, txt: `${melhorCanal.taxa}% conversão e ${fmtK(melhorCanal.valor)}.`, sub: 'Ampliar foco nesse canal.' });
-  if (melhorFat && pct(melhorFat.valor_aprovado, g.aprovado) > 40) ins.push({ t: 'w', i: '⭐', l: `Dependência: ${melhorFat.nome}`, txt: `${pct(melhorFat.valor_aprovado, g.aprovado).toFixed(0)}% da receita em um ${vLabel.toLowerCase()} — risco operacional.`, sub: `Desenvolver demais ${vLabelP.toLowerCase()}.` });
   if (lento) ins.push({ t: 'w', i: '⏱️', l: `Lento em Fechar: ${lento.nome}`, txt: `Média de ${lento.tempo_medio} dias (ideal: até 3).`, sub: 'Mais tempo aumenta chance de desistência.' });
   if (g.cancelados > g.total * (cancAlerta / 100)) ins.push({ t: 'o', i: '🔴', l: 'Alto Índice de Cancelamentos', txt: `${g.cancelados} cancelamentos (${pct(g.cancelados, g.total + g.cancelados).toFixed(0)}% do total).`, sub: `Investigar por ${vLabel.toLowerCase()}.` });
   return ins;
@@ -3740,7 +3818,6 @@ function getAcoesList(M, prev_) {
   const pLabel = CFG.proposta || 'Orçamento';
   const pLabelP = pluralizar(pLabel);
   const piorTaxa = [...M.dentistas].filter(d => d.total >= 5).sort((a, b) => a.taxa - b.taxa)[0];
-  const melhorFat = [...M.dentistas].sort((a, b) => b.valor_aprovado - a.valor_aprovado)[0];
   const upsell = [...M.dentistas].filter(d => d.taxa >= 85 && d.total >= 5).sort((a, b) => a.ticket_medio - b.ticket_medio)[0];
   const top5 = M.topVencidos.slice(0, 5);
   const melhorCanal = [...M.canais].filter(c => c.total >= 5).sort((a, b) => b.taxa - a.taxa)[0];
@@ -3758,8 +3835,6 @@ function getAcoesList(M, prev_) {
     acoes.push({ t: `Capacitar ${upsell.nome} em upsell`, d: `${upsell.taxa}% de conversão mas ticket médio de ${fmtK(upsell.ticket_medio)}. ${cLabelP} engajados são receptivos a serviços complementares.`, p: 'pm' });
   if (melhorCanal)
     acoes.push({ t: `Ampliar foco no canal "${canalDisplay(melhorCanal.canal)}"`, d: `${melhorCanal.taxa}% de conversão e ${fmtK(melhorCanal.valor)} — melhor ROI.`, p: 'pm' });
-  if (melhorFat && pct(melhorFat.valor_aprovado, g.aprovado) > 35)
-    acoes.push({ t: `Reduzir dependência de ${melhorFat.nome}`, d: `${pct(melhorFat.valor_aprovado, g.aprovado).toFixed(0)}% da receita em um ${vLabel.toLowerCase()} — risco operacional. Desenvolver os demais ${vLabelP.toLowerCase()}.`, p: 'pl' });
   if (prev_ && M.geral.aprovado < prev_.geral.aprovado)
     acoes.push({ t: `Recuperar queda de ${fmtK(prev_.geral.aprovado - M.geral.aprovado)} vs ${prev_.periodo}`, d: `Receita caiu ${pct(prev_.geral.aprovado - M.geral.aprovado, prev_.geral.aprovado).toFixed(0)}% em relação ao período anterior.`, p: 'ph' });
   return acoes;
@@ -4309,24 +4384,6 @@ function exportPDF() {
         doc.setTextColor(...cMuted);
         doc.text(gapVal > 0 ? 'Faltam ' + clean(fmtK(gapVal)) + ' para atingir a meta.' : 'Meta superada em ' + clean(fmtK(Math.abs(gapVal))) + '!', mg + 4, y + 19);
         y += 28;
-      }
-
-      if (M.dentistas.length > 1) {
-        y = secTitle('Indice de Concentracao de Receita', y);
-        const topD = [...M.dentistas].sort((a, b) => b.valor_aprovado - a.valor_aprovado)[0];
-        const concPct = g.aprovado > 0 ? +(topD.valor_aprovado / g.aprovado * 100).toFixed(1) : 0;
-        doc.setFillColor(...cSurf);
-        doc.roundedRect(mg, y, W - mg * 2, 14, 2, 2, 'F');
-        const concC = concPct > 40 ? cRed : concPct > 30 ? cYellow : cGreen;
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(8);
-        doc.setTextColor(...concC);
-        doc.text(clean(topD.nome) + ' representa ' + concPct + '% da receita total', mg + 4, y + 6);
-        doc.setFont('helvetica', 'normal');
-        doc.setFontSize(7);
-        doc.setTextColor(...cMuted);
-        doc.text(concPct > 35 ? 'Atencao - considere diversificar a carteira de ' + clean(vLabelP.toLowerCase()) : 'Concentracao saudavel', mg + 4, y + 11);
-        y += 18;
       }
 
       addFooter(pagNum, totalPags);
