@@ -4386,6 +4386,23 @@ function exportPDF() {
         y += 28;
       }
 
+      if (M.scoreParts && M.scoreParts.length) {
+        y = secTitle('Detalhamento do Score de Saude', y);
+        M.scoreParts.forEach(p => {
+          const pctv = p.max > 0 ? Math.round(p.pts / p.max * 100) : 0;
+          const pc = pctv >= 75 ? cGreen : pctv >= 45 ? cYellow : cRed;
+          doc.setFont('helvetica', 'bold');
+          doc.setFontSize(7.5);
+          doc.setTextColor(...cText);
+          doc.text(clean(p.label), mg, y + 3);
+          doc.setTextColor(...pc);
+          doc.text(p.pts.toFixed(1) + '/' + p.max, W - mg, y + 3, { align: 'right' });
+          progressBar(mg, y + 5, W - mg * 2, 2.5, pctv, pc);
+          y += 8;
+        });
+        y += 2;
+      }
+
       addFooter(pagNum, totalPags);
 
       // ══════════════════════════════════════
@@ -5050,6 +5067,22 @@ kpis.forEach((k, i) => {
   const col = i % 3, row = Math.floor(i / 3);
   addKpiCard(s, .25 + col * 3.27, 1.0 + row * 2.18, 3.1, 1.9, k.l, k.v, k.s, k.c);
 });
+}
+
+// ════════════════════
+//  SLIDE — DETALHAMENTO DO SCORE
+// ════════════════════
+if (M.scoreParts && M.scoreParts.length) {
+  const s = makeSlide('Detalhamento do Score de Saude', 'Como o score ' + M.score + '/100 e composto');
+  M.scoreParts.forEach((p, i) => {
+    const rowY = 1.05 + i * .52;
+    const pctv = p.max > 0 ? Math.round(p.pts / p.max * 100) : 0;
+    const pc = pctv >= 75 ? GREEN : pctv >= 45 ? YELLOW : RED;
+    s.addText(se(p.label), { x: .4, y: rowY, w: 4.4, h: .32, fontSize: 12, color: TEXT, fontFace: 'Calibri' });
+    s.addText(p.pts.toFixed(1) + '/' + p.max, { x: 4.85, y: rowY, w: 1.25, h: .32, fontSize: 12, bold: true, color: pc, fontFace: 'Calibri', align: 'right' });
+    s.addShape(pptx.ShapeType.roundRect, { x: 6.3, y: rowY + .07, w: 3.3, h: .18, fill: { color: SURF2 }, line: { type: 'none' }, rectRadius: .03 });
+    if (pctv > 0) s.addShape(pptx.ShapeType.roundRect, { x: 6.3, y: rowY + .07, w: Math.max(3.3 * pctv / 100, .05), h: .18, fill: { color: pc }, line: { type: 'none' }, rectRadius: .03 });
+  });
 }
 
 // ════════════════════
