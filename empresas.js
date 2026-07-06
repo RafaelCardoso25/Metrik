@@ -167,7 +167,26 @@ function renderTelaEmpresas(empresas) {
       background:linear-gradient(140deg,color-mix(in srgb,var(--accent) 40%,transparent),color-mix(in srgb,var(--accent2) 16%,transparent) 45%,color-mix(in srgb,var(--text) 5%,transparent) 100%);
       box-shadow:0 40px 90px -45px rgba(0,0,0,.8);
     ">
-      <div style="background:var(--surface);border-radius:18px;padding:34px 32px">
+      <div style="background:var(--surface);border-radius:18px;padding:34px 32px;position:relative">
+
+        <div style="position:absolute;top:14px;right:14px;display:flex;gap:7px;z-index:3">
+          <button onclick="toggleTheme()" title="Alternar tema claro/escuro"
+            style="width:32px;height:32px;border-radius:8px;background:color-mix(in srgb,var(--text) 3%,transparent);
+            border:1px solid var(--border2);display:flex;align-items:center;justify-content:center;
+            color:var(--muted2);cursor:pointer;transition:.16s"
+            onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'"
+            onmouseout="this.style.borderColor='var(--border2)';this.style.color='var(--muted2)'">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
+          </button>
+          <button onclick="authLogout()" title="Sair da conta"
+            style="width:32px;height:32px;border-radius:8px;background:color-mix(in srgb,var(--text) 3%,transparent);
+            border:1px solid var(--border2);display:flex;align-items:center;justify-content:center;
+            color:var(--muted2);cursor:pointer;transition:.16s"
+            onmouseover="this.style.background='color-mix(in srgb,var(--red) 8%,transparent)';this.style.borderColor='color-mix(in srgb,var(--red) 40%,transparent)';this.style.color='var(--red)'"
+            onmouseout="this.style.background='color-mix(in srgb,var(--text) 3%,transparent)';this.style.borderColor='var(--border2)';this.style.color='var(--muted2)'">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>
+          </button>
+        </div>
 
         <div style="text-align:center;margin-bottom:26px">
           <div style="width:48px;height:48px;margin:0 auto 12px;border-radius:13px;
