@@ -41,7 +41,7 @@
 /* fundo mais quieto (menos "respiração", mais sistemático) */
 body::before{
   background:
-    radial-gradient(ellipse 80% 50% at 50% -8%,rgba(91,141,239,.06) 0%,transparent 60%) !important;
+    radial-gradient(ellipse 80% 50% at 50% -8%,color-mix(in srgb,var(--accent) 6%,transparent) 0%,transparent 60%) !important;
   animation:none !important;
 }
 
@@ -125,7 +125,7 @@ body::before{
   border-radius:0 !important;border:none !important;
   border-right:1px solid var(--border) !important;
 }
-.kpi:hover{transform:none !important;background:rgba(255,255,255,.015)}
+.kpi:hover{transform:none !important;background:color-mix(in srgb,var(--text) 2%,transparent)}
 
 /* responsivo: volta a barra pro topo no mobile */
 @media(max-width:820px){
@@ -185,7 +185,7 @@ body::before{
    RODAPÉ DA SIDEBAR — chip da empresa (igual ao protótipo)
 ═══════════════════════════════════════════════════════════ */
 .msb-foot{margin-top:auto;padding-top:14px;border-top:1px solid var(--border)}
-.msb-comp{display:flex;align-items:center;gap:10px;padding:9px 10px;border:1px solid var(--border);border-radius:10px;background:rgba(255,255,255,.015)}
+.msb-comp{display:flex;align-items:center;gap:10px;padding:9px 10px;border:1px solid var(--border);border-radius:10px;background:color-mix(in srgb,var(--text) 2%,transparent)}
 .msb-av{width:30px;height:30px;border-radius:8px;flex:0 0 30px;display:grid;place-items:center;
   font-family:var(--fh);font-weight:700;font-size:12px;color:#fff;
   background:linear-gradient(135deg,var(--accent),var(--accent2))}
@@ -201,24 +201,24 @@ body::before{
 
 /* fundo ambiente: grid técnico + glow */
 .emp-amb-grid{position:fixed;inset:0;pointer-events:none;z-index:0;
-  background-image:linear-gradient(rgba(91,141,239,.045) 1px,transparent 1px),linear-gradient(90deg,rgba(91,141,239,.045) 1px,transparent 1px);
+  background-image:linear-gradient(color-mix(in srgb,var(--accent) 5%,transparent) 1px,transparent 1px),linear-gradient(90deg,color-mix(in srgb,var(--accent) 5%,transparent) 1px,transparent 1px);
   background-size:46px 46px;
   -webkit-mask-image:radial-gradient(ellipse 70% 70% at 50% 45%,#000,transparent 90%);
   mask-image:radial-gradient(ellipse 70% 70% at 50% 45%,#000,transparent 90%)}
 .emp-amb-glow{position:fixed;width:620px;height:620px;border-radius:50%;pointer-events:none;z-index:0;
-  background:radial-gradient(circle,rgba(91,141,239,.08),transparent 68%);top:-220px;left:50%;transform:translateX(-50%)}
+  background:radial-gradient(circle,color-mix(in srgb,var(--accent) 8%,transparent),transparent 68%);top:-220px;left:50%;transform:translateX(-50%)}
 
 /* card acima do ambiente + filete de luz no topo */
 .emp-card{z-index:1}
 .emp-card::before{content:"";position:absolute;top:0;left:0;right:0;height:1px;border-radius:20px 20px 0 0;
-  background:linear-gradient(90deg,transparent,rgba(91,141,239,.7),rgba(124,92,240,.5),transparent)}
+  background:linear-gradient(90deg,transparent,color-mix(in srgb,var(--accent) 70%,transparent),color-mix(in srgb,var(--accent2) 50%,transparent),transparent)}
 
 /* faixa de destaque atrás do header (criar empresa) */
 .emp-create .emp-chd{margin:-10px -12px 14px;padding:12px;border-radius:12px;
-  background:linear-gradient(140deg,rgba(91,141,239,.08),transparent 65%)}
+  background:linear-gradient(140deg,color-mix(in srgb,var(--accent) 8%,transparent),transparent 65%)}
 
 /* anel de foco nos campos (efeito glow) */
-.emp-fld:focus{border-color:var(--accent) !important;box-shadow:0 0 0 3px rgba(91,141,239,.14)}
+.emp-fld:focus{border-color:var(--accent) !important;box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 14%,transparent)}
 
 /* preview: filete lateral colorido */
 .emp-preview::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;
@@ -239,10 +239,10 @@ body::before{
 .tbtn{font-size:12px !important;font-weight:500 !important;padding:7px 12px !important;border-radius:8px !important;
   background:var(--surface) !important;border:1px solid var(--border) !important;color:var(--muted2) !important}
 .tbtn:hover{color:var(--text) !important;border-color:var(--border2) !important}
-.tbtn.accent{background:var(--accent-dim) !important;border-color:rgba(91,141,239,.3) !important;color:#A9C4F7 !important}
-.tbtn.green{background:rgba(70,192,138,.1) !important;border-color:rgba(70,192,138,.28) !important;color:var(--green) !important}
-.tbtn.csv{background:rgba(215,163,63,.1) !important;border-color:rgba(215,163,63,.28) !important;color:var(--yellow) !important}
-.tbtn.purple{background:rgba(124,92,240,.1) !important;border-color:rgba(124,92,240,.28) !important;color:#b9a6f5 !important}
+.tbtn.accent{background:var(--accent-dim) !important;border-color:color-mix(in srgb,var(--accent) 30%,transparent) !important;color:var(--accent-text) !important}
+.tbtn.green{background:color-mix(in srgb,var(--green) 10%,transparent) !important;border-color:color-mix(in srgb,var(--green) 28%,transparent) !important;color:var(--green) !important}
+.tbtn.csv{background:color-mix(in srgb,var(--yellow) 10%,transparent) !important;border-color:color-mix(in srgb,var(--yellow) 28%,transparent) !important;color:var(--yellow) !important}
+.tbtn.purple{background:color-mix(in srgb,var(--accent2) 10%,transparent) !important;border-color:color-mix(in srgb,var(--accent2) 28%,transparent) !important;color:var(--accent2-text) !important}
 
 /* ── readout strip (.kpi-grid/.kpi → .readout/.ro) ── */
 .kpi-grid{grid-template-columns:repeat(auto-fit,minmax(150px,1fr)) !important}
@@ -253,11 +253,11 @@ body::before{
 
 /* ── resumo executivo + anel de score (.exec-summary → .exec) ── */
 .exec-summary{grid-template-columns:1fr auto !important;align-items:center !important;gap:24px !important;
-  background:linear-gradient(120deg,rgba(91,141,239,.06),transparent 70%) !important;
+  background:linear-gradient(120deg,color-mix(in srgb,var(--accent) 6%,transparent),transparent 70%) !important;
   border:1px solid var(--border) !important}
 .exec-icon{display:none !important}
 .exec-title{font-family:var(--mono) !important;font-size:10px !important;letter-spacing:.16em !important;color:var(--accent) !important}
-.exec-text{font-size:13.5px !important;line-height:1.7 !important;color:#CFD4DE !important;max-width:760px}
+.exec-text{font-size:13.5px !important;line-height:1.7 !important;color:color-mix(in srgb,var(--text) 88%,transparent) !important;max-width:760px}
 .exec-score{text-align:center;flex-shrink:0;min-width:140px}
 .exec-ring{position:relative;width:104px;height:104px;margin:0 auto}
 .exec-ring-v{position:absolute;inset:0;display:grid;place-content:center;text-align:center}
@@ -287,7 +287,7 @@ body::before{
 .ins{border:1px solid var(--border) !important;border-radius:12px !important;padding:15px 16px !important}
 .ins-ico{width:32px !important;height:32px !important;border-radius:8px !important}
 .ins-type{font-family:var(--mono) !important;font-size:9.5px !important;letter-spacing:.1em !important}
-.ins-txt{font-size:12.5px !important;line-height:1.55 !important;color:#CFD4DE !important}
+.ins-txt{font-size:12.5px !important;line-height:1.55 !important;color:color-mix(in srgb,var(--text) 88%,transparent) !important}
 
 /* ── canais da Visão Geral como barras segmentadas (igual proto .seg-row) ── */
 #canaisGrid{display:flex !important;flex-direction:column;gap:11px}
@@ -303,8 +303,8 @@ body::before{
 .nav-tabs .rgroup:first-of-type{padding-top:2px}
 @media(max-width:820px){.nav-tabs .rgroup{display:none}}
 
-/* ── barras de faturamento: azul uniforme (igual proto .hfill) ── */
-.bar-fill{background:linear-gradient(90deg,var(--accent),#6f9bf2)}
+/* ── barras de faturamento: cor do acento do tema ── */
+.bar-fill{background:linear-gradient(90deg,var(--accent),color-mix(in srgb,var(--accent) 72%,#fff))}
 
 /* ── tabela de dentistas no estilo do protótipo ── */
 .tbl .rk{font-family:var(--mono);font-size:11px;color:var(--muted);width:26px}

@@ -29,6 +29,7 @@ async function inicializarEmpresas() {
 async function entrarEmpresa(empresa) {
   _empresaAtiva = empresa;
   _modoTeste = false;
+  if (typeof gResetEmpresa === 'function') gResetEmpresa();
 
   // Reseta parsed antes de carregar do banco
   parsedMonths = {};
@@ -86,6 +87,7 @@ async function entrarEmpresa(empresa) {
 function entrarModoTeste() {
   _empresaAtiva = null;
   _modoTeste = true;
+  if (typeof gResetEmpresa === 'function') gResetEmpresa();
 
   parsedMonths = {};
   parsedExpenses = {};
@@ -142,7 +144,7 @@ function renderTelaEmpresas(empresas) {
     </div>`;
   const btnTeste = `
     <button onclick="entrarModoTeste()"
-      style="width:100%;padding:13px;background:rgba(255,255,255,.025);border:1px solid var(--border2);
+      style="width:100%;padding:13px;background:color-mix(in srgb,var(--text) 3%,transparent);border:1px solid var(--border2);
       border-radius:11px;color:var(--muted2);font-size:13px;font-weight:500;cursor:pointer;transition:.16s;
       display:flex;align-items:center;justify-content:center;gap:8px;font-family:var(--fb)"
       onmouseover="this.style.borderColor='var(--accent2)';this.style.color='var(--text)'"
@@ -155,21 +157,21 @@ function renderTelaEmpresas(empresas) {
     <button onclick='${click}'
       style="width:100%;padding:14px;background:var(--accent);border:none;border-radius:11px;
       color:#fff;font-family:var(--fh);font-size:14px;font-weight:600;cursor:pointer;transition:.18s"
-      onmouseover="this.style.background='#4a7fe0';this.style.transform='translateY(-1px)'"
+      onmouseover="this.style.background='var(--accent-strong)';this.style.transform='translateY(-1px)'"
       onmouseout="this.style.background='var(--accent)';this.style.transform='translateY(0)'">${txt}</button>`;
 
   wrap.innerHTML = `
     <div class="emp-amb-grid"></div><div class="emp-amb-glow"></div>
     <div class="emp-card" style="
       padding:1px;border-radius:19px;width:100%;max-width:480px;position:relative;
-      background:linear-gradient(140deg,rgba(91,141,239,.4),rgba(124,92,240,.16) 45%,rgba(255,255,255,.05) 100%);
+      background:linear-gradient(140deg,color-mix(in srgb,var(--accent) 40%,transparent),color-mix(in srgb,var(--accent2) 16%,transparent) 45%,color-mix(in srgb,var(--text) 5%,transparent) 100%);
       box-shadow:0 40px 90px -45px rgba(0,0,0,.8);
     ">
       <div style="background:var(--surface);border-radius:18px;padding:34px 32px">
 
         <div style="text-align:center;margin-bottom:26px">
           <div style="width:48px;height:48px;margin:0 auto 12px;border-radius:13px;
-            background:var(--accent-dim);border:1px solid rgba(91,141,239,.3);
+            background:var(--accent-dim);border:1px solid color-mix(in srgb,var(--accent) 30%,transparent);
             display:flex;align-items:center;justify-content:center;color:var(--accent)">
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19V9M10 19V5M16 19v-7M22 19H2"/></svg>
           </div>
@@ -196,7 +198,7 @@ function renderTelaEmpresas(empresas) {
             </div>
             <div style="display:flex;gap:6px;flex-shrink:0">
               <button onclick="abrirEdicaoEmpresa('${empresa.id}')" title="Editar"
-                style="width:32px;height:32px;border-radius:8px;background:rgba(255,255,255,.03);
+                style="width:32px;height:32px;border-radius:8px;background:color-mix(in srgb,var(--text) 3%,transparent);
                 border:1px solid var(--border2);display:flex;align-items:center;justify-content:center;
                 color:var(--muted2);cursor:pointer;transition:.16s"
                 onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'"
@@ -204,11 +206,11 @@ function renderTelaEmpresas(empresas) {
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
               </button>
               <button onclick="confirmarDeletarEmpresa('${empresa.id}','${empresa.nome.replace(/'/g, "\\\'")}')" title="Excluir"
-                style="width:32px;height:32px;border-radius:8px;background:rgba(255,255,255,.03);
+                style="width:32px;height:32px;border-radius:8px;background:color-mix(in srgb,var(--text) 3%,transparent);
                 border:1px solid var(--border2);display:flex;align-items:center;justify-content:center;
                 color:var(--muted2);cursor:pointer;transition:.16s"
-                onmouseover="this.style.background='rgba(226,112,92,.08)';this.style.borderColor='rgba(226,112,92,.4)';this.style.color='var(--red)'"
-                onmouseout="this.style.background='rgba(255,255,255,.03)';this.style.borderColor='var(--border2)';this.style.color='var(--muted2)'">
+                onmouseover="this.style.background='color-mix(in srgb,var(--red) 8%,transparent)';this.style.borderColor='color-mix(in srgb,var(--red) 40%,transparent)';this.style.color='var(--red)'"
+                onmouseout="this.style.background='color-mix(in srgb,var(--text) 3%,transparent)';this.style.borderColor='var(--border2)';this.style.color='var(--muted2)'">
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg>
               </button>
             </div>
@@ -233,7 +235,7 @@ function renderTelaEmpresas(empresas) {
           </div>
 
           <p style="text-align:center;font-size:12px;color:var(--muted2);line-height:1.6;margin-bottom:18px">
-            Leva menos de um minuto. Depois é só <b style="color:#A9C4F7;font-weight:600">entrar</b> sempre que quiser ver seus indicadores.
+            Leva menos de um minuto. Depois é só <b style="color:var(--accent-text);font-weight:600">entrar</b> sempre que quiser ver seus indicadores.
           </p>
 
           ${btnEntrar('+ Criar empresa', 'abrirCriarEmpresa()')}
@@ -263,7 +265,7 @@ function abrirCriarEmpresa() {
   const dot = `<span style="position:absolute;left:13px;width:6px;height:6px;border-radius:50%;background:var(--raise);transition:.16s;pointer-events:none"></span>`;
   const labelStyle = `style="font-family:var(--mono);font-size:10px;font-weight:500;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)"`;
   const exStyle = `style="font-size:11px;color:var(--muted);padding-left:2px"`;
-  const tag = (id, txt) => `<span id="${id}" style="font-family:var(--mono);font-size:10.5px;font-weight:600;background:var(--accent-dim);border:1px solid rgba(91,141,239,.35);color:#BBD2F9;padding:4px 11px;border-radius:7px;flex-shrink:0;min-width:78px;text-align:center">${txt}</span>`;
+  const tag = (id, txt) => `<span id="${id}" style="font-family:var(--mono);font-size:10.5px;font-weight:600;background:var(--accent-dim);border:1px solid color-mix(in srgb,var(--accent) 35%,transparent);color:#BBD2F9;padding:4px 11px;border-radius:7px;flex-shrink:0;min-width:78px;text-align:center">${txt}</span>`;
 
   wrap.innerHTML = `
     <div class="emp-amb-grid"></div><div class="emp-amb-glow"></div>
@@ -274,10 +276,10 @@ function abrirCriarEmpresa() {
     ">
 
       <div style="display:flex;align-items:center;gap:15px;padding:28px 34px 22px;
-        background:linear-gradient(140deg,rgba(91,141,239,.07),transparent 65%);border-bottom:1px solid var(--border)">
+        background:linear-gradient(140deg,color-mix(in srgb,var(--accent) 7%,transparent),transparent 65%);border-bottom:1px solid var(--border)">
         <div style="width:48px;height:48px;border-radius:13px;flex-shrink:0;
-          background:linear-gradient(135deg,rgba(91,141,239,.22),rgba(124,92,240,.14));
-          border:1px solid rgba(91,141,239,.35);display:flex;align-items:center;justify-content:center;color:#A9C4F7">
+          background:linear-gradient(135deg,color-mix(in srgb,var(--accent) 22%,transparent),color-mix(in srgb,var(--accent2) 14%,transparent));
+          border:1px solid color-mix(in srgb,var(--accent) 35%,transparent);display:flex;align-items:center;justify-content:center;color:var(--accent-text)">
           <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="11" height="18" rx="1"/><path d="M9 8h1M9 12h1M9 16h1M15 21v-6h4v6"/></svg>
         </div>
         <div>
@@ -324,10 +326,10 @@ function abrirCriarEmpresa() {
           </div>
         </div>
 
-        <div style="position:relative;background:linear-gradient(120deg,rgba(91,141,239,.07),rgba(124,92,240,.03));
-          border:1px solid rgba(91,141,239,.2);border-radius:13px;padding:18px 20px 18px 22px;margin-bottom:26px;overflow:hidden">
+        <div style="position:relative;background:linear-gradient(120deg,color-mix(in srgb,var(--accent) 7%,transparent),color-mix(in srgb,var(--accent2) 3%,transparent));
+          border:1px solid color-mix(in srgb,var(--accent) 20%,transparent);border-radius:13px;padding:18px 20px 18px 22px;margin-bottom:26px;overflow:hidden">
           <span style="position:absolute;left:0;top:0;bottom:0;width:3px;background:linear-gradient(var(--accent),var(--accent2))"></span>
-          <div style="font-family:var(--mono);font-size:9.5px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:#A9C4F7;margin-bottom:14px;display:flex;align-items:center;gap:8px">
+          <div style="font-family:var(--mono);font-size:9.5px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--accent-text);margin-bottom:14px;display:flex;align-items:center;gap:8px">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>Como vai aparecer no sistema</div>
           <div style="display:flex;align-items:center;gap:11px;font-size:12px;color:var(--muted2);margin-bottom:11px">${tag('pvVendedor', 'Vendedor')}substitui "vendedor" nos filtros e gráficos</div>
           <div style="display:flex;align-items:center;gap:11px;font-size:12px;color:var(--muted2);margin-bottom:11px">${tag('pvCliente', 'Cliente')}substitui "cliente" em toda a interface</div>
@@ -338,13 +340,13 @@ function abrirCriarEmpresa() {
           <button onclick="salvarNovaEmpresa()"
             style="flex:2;padding:14px;background:var(--accent);border:none;border-radius:11px;
             color:#fff;font-family:var(--fh);font-weight:600;font-size:13.5px;cursor:pointer;transition:.18s;
-            box-shadow:0 12px 26px -10px rgba(91,141,239,.6);display:flex;align-items:center;justify-content:center;gap:8px"
-            onmouseover="this.style.background='#4a7fe0';this.style.transform='translateY(-2px)'"
+            box-shadow:0 12px 26px -10px color-mix(in srgb,var(--accent) 60%,transparent);display:flex;align-items:center;justify-content:center;gap:8px"
+            onmouseover="this.style.background='var(--accent-strong)';this.style.transform='translateY(-2px)'"
             onmouseout="this.style.background='var(--accent)';this.style.transform='translateY(0)'">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 6"/></svg>Criar empresa
           </button>
           <button onclick="inicializarEmpresas()"
-            style="flex:1;padding:14px;background:rgba(255,255,255,.03);border:1px solid var(--border2);
+            style="flex:1;padding:14px;background:color-mix(in srgb,var(--text) 3%,transparent);border:1px solid var(--border2);
             border-radius:11px;color:var(--muted2);font-size:13px;font-weight:500;cursor:pointer;transition:.16s;font-family:var(--fb)"
             onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--muted2)'">
             Cancelar
@@ -409,10 +411,10 @@ async function abrirEdicaoEmpresa(empresaId) {
   wrap.style.alignItems = 'center';
   wrap.style.justifyContent = 'center';
   wrap.innerHTML = `
-    <div style="background:#10131a;border:1px solid rgba(255,255,255,.1);border-radius:16px;
-      padding:36px 40px;width:100%;max-width:560px;box-shadow:0 24px 64px rgba(0,0,0,.6);
+    <div style="background:var(--surface);border:1px solid color-mix(in srgb,var(--text) 10%,transparent);border-radius:16px;
+      padding:36px 40px;width:100%;max-width:560px;box-shadow:var(--modal-shadow);
       max-height:90vh;overflow-y:auto;">
-      <div style="color:#fff;opacity:.5;font-size:13px">Carregando...</div>
+      <div style="color:var(--text);opacity:.5;font-size:13px">Carregando...</div>
     </div>
   `;
 
@@ -460,67 +462,67 @@ async function abrirEdicaoEmpresa(empresaId) {
 
     const renderEdicao = () => {
       wrap.innerHTML = `
-        <div style="background:#10131a;border:1px solid rgba(255,255,255,.1);border-radius:16px;
-          padding:36px 40px;width:100%;max-width:560px;box-shadow:0 24px 64px rgba(0,0,0,.6);
+        <div style="background:var(--surface);border:1px solid color-mix(in srgb,var(--text) 10%,transparent);border-radius:16px;
+          padding:36px 40px;width:100%;max-width:560px;box-shadow:var(--modal-shadow);
           max-height:90vh;overflow-y:auto;">
 
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px">
-            <div style="font-size:18px;font-weight:700;color:#e7eaf0">✏️ Editar Empresa</div>
+            <div style="font-size:18px;font-weight:700;color:var(--text)">✏️ Editar Empresa</div>
             <button onclick="fecharEdicao()"
-              style="background:transparent;border:none;color:#565e6d;font-size:22px;cursor:pointer;line-height:1">×</button>
+              style="background:transparent;border:none;color:var(--muted);font-size:22px;cursor:pointer;line-height:1">×</button>
           </div>
 
           <!-- Dados -->
           <div style="display:flex;flex-direction:column;gap:12px;margin-bottom:24px">
             <div>
-              <label style="font-size:11px;color:#565e6d;font-weight:600;letter-spacing:.5px;text-transform:uppercase">Nome</label>
+              <label style="font-size:11px;color:var(--muted);font-weight:600;letter-spacing:.5px;text-transform:uppercase">Nome</label>
               <input id="editNome" type="text" value="${empresa.nome || ''}"
-                style="width:100%;margin-top:6px;padding:9px 13px;background:#161a22;
-                border:1px solid rgba(255,255,255,.1);border-radius:8px;color:#e7eaf0;
+                style="width:100%;margin-top:6px;padding:9px 13px;background:var(--surface2);
+                border:1px solid color-mix(in srgb,var(--text) 10%,transparent);border-radius:8px;color:var(--text);
                 font-size:13px;box-sizing:border-box;outline:none"
-                onfocus="this.style.borderColor='rgba(91,141,239,.5)'"
-                onblur="this.style.borderColor='rgba(255,255,255,.1)'">
+                onfocus="this.style.borderColor='color-mix(in srgb,var(--accent) 50%,transparent)'"
+                onblur="this.style.borderColor='color-mix(in srgb,var(--text) 10%,transparent)'">
             </div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
               <div>
-                <label style="font-size:11px;color:#565e6d;font-weight:600;letter-spacing:.5px;text-transform:uppercase">
+                <label style="font-size:11px;color:var(--muted);font-weight:600;letter-spacing:.5px;text-transform:uppercase">
                   Vendedor
-                  <span style="color:#5B8DEF;font-size:10px;text-transform:none;font-weight:400;margin-left:2px">(na planilha)</span>
+                  <span style="color:var(--accent);font-size:10px;text-transform:none;font-weight:400;margin-left:2px">(na planilha)</span>
                 </label>
                 <input id="editVendedor" type="text" value="${empresa.vendedor || 'Vendedor'}"
-                  style="width:100%;margin-top:6px;padding:9px 13px;background:#161a22;
-                  border:1px solid rgba(255,255,255,.1);border-radius:8px;color:#e7eaf0;
+                  style="width:100%;margin-top:6px;padding:9px 13px;background:var(--surface2);
+                  border:1px solid color-mix(in srgb,var(--text) 10%,transparent);border-radius:8px;color:var(--text);
                   font-size:13px;box-sizing:border-box;outline:none">
               </div>
               <div>
-                <label style="font-size:11px;color:#565e6d;font-weight:600;letter-spacing:.5px;text-transform:uppercase">
+                <label style="font-size:11px;color:var(--muted);font-weight:600;letter-spacing:.5px;text-transform:uppercase">
                   Cliente
-                  <span style="color:#5B8DEF;font-size:10px;text-transform:none;font-weight:400;margin-left:2px">(na planilha)</span>
+                  <span style="color:var(--accent);font-size:10px;text-transform:none;font-weight:400;margin-left:2px">(na planilha)</span>
                 </label>
                 <input id="editCliente" type="text" value="${empresa.cliente || 'Cliente'}"
-                  style="width:100%;margin-top:6px;padding:9px 13px;background:#161a22;
-                  border:1px solid rgba(255,255,255,.1);border-radius:8px;color:#e7eaf0;
+                  style="width:100%;margin-top:6px;padding:9px 13px;background:var(--surface2);
+                  border:1px solid color-mix(in srgb,var(--text) 10%,transparent);border-radius:8px;color:var(--text);
                   font-size:13px;box-sizing:border-box;outline:none">
               </div>
             </div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
               <div>
-                <label style="font-size:11px;color:#565e6d;font-weight:600;letter-spacing:.5px;text-transform:uppercase">
+                <label style="font-size:11px;color:var(--muted);font-weight:600;letter-spacing:.5px;text-transform:uppercase">
                   Proposta
-                  <span style="color:#5B8DEF;font-size:10px;text-transform:none;font-weight:400;margin-left:2px">(na planilha)</span>
+                  <span style="color:var(--accent);font-size:10px;text-transform:none;font-weight:400;margin-left:2px">(na planilha)</span>
                 </label>
                 <input id="editProposta" type="text" value="${empresa.proposta || 'Orçamento'}"
-                  style="width:100%;margin-top:6px;padding:9px 13px;background:#161a22;
-                  border:1px solid rgba(255,255,255,.1);border-radius:8px;color:#e7eaf0;
+                  style="width:100%;margin-top:6px;padding:9px 13px;background:var(--surface2);
+                  border:1px solid color-mix(in srgb,var(--text) 10%,transparent);border-radius:8px;color:var(--text);
                   font-size:13px;box-sizing:border-box;outline:none">
               </div>
               <div>
-                <label style="font-size:11px;color:#565e6d;font-weight:600;letter-spacing:.5px;text-transform:uppercase">Meta Global</label>
+                <label style="font-size:11px;color:var(--muted);font-weight:600;letter-spacing:.5px;text-transform:uppercase">Meta Global</label>
                 <input id="editMeta" type="text"
                   value="${empresa.meta > 0 ? 'R$ ' + empresa.meta.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : ''}"
                   placeholder="R$ 0,00"
-                  style="width:100%;margin-top:6px;padding:9px 13px;background:#161a22;
-                  border:1px solid rgba(255,255,255,.1);border-radius:8px;color:#e7eaf0;
+                  style="width:100%;margin-top:6px;padding:9px 13px;background:var(--surface2);
+                  border:1px solid color-mix(in srgb,var(--text) 10%,transparent);border-radius:8px;color:var(--text);
                   font-size:13px;box-sizing:border-box;outline:none">
               </div>
             </div>
@@ -530,17 +532,17 @@ async function abrirEdicaoEmpresa(empresaId) {
           <div style="margin-bottom:20px">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:6px">
               <div style="font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;
-                color:#565e6d">📅 KPIs Carregados (${meses.length})</div>
+                color:var(--muted)">📅 KPIs Carregados (${meses.length})</div>
               ${meses.length > 0 ? `
                 <div style="display:flex;align-items:center;gap:10px">
-                  <label style="display:flex;align-items:center;gap:5px;font-size:11px;color:#565e6d;cursor:pointer">
+                  <label style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--muted);cursor:pointer">
                     <input type="checkbox" id="checkTodosMeses" onchange="toggleSelecaoTodosMeses(this.checked)"
                       style="width:14px;height:14px;cursor:pointer">
                     Selecionar todos
                   </label>
                   <button id="btnRemoverMeses" onclick="pedirConfirmacaoMeses()"
-                    style="display:none;padding:5px 12px;background:rgba(226,112,92,.1);
-                    border:1px solid rgba(226,112,92,.3);color:#e2705c;border-radius:6px;
+                    style="display:none;padding:5px 12px;background:color-mix(in srgb,var(--red) 10%,transparent);
+                    border:1px solid color-mix(in srgb,var(--red) 30%,transparent);color:var(--red);border-radius:6px;
                     font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap">
                     🗑️ Remover selecionados (0)
                   </button>
@@ -548,34 +550,34 @@ async function abrirEdicaoEmpresa(empresaId) {
               ` : ''}
             </div>
 
-            <div id="confirmMesesWrap" style="display:none;background:rgba(226,112,92,.1);
-              border:1px solid rgba(226,112,92,.4);border-radius:8px;padding:12px 14px;margin-bottom:10px">
-              <div id="confirmMesesTexto" style="color:#e2705c;font-size:13px;font-weight:600;margin-bottom:10px"></div>
+            <div id="confirmMesesWrap" style="display:none;background:color-mix(in srgb,var(--red) 10%,transparent);
+              border:1px solid color-mix(in srgb,var(--red) 40%,transparent);border-radius:8px;padding:12px 14px;margin-bottom:10px">
+              <div id="confirmMesesTexto" style="color:var(--red);font-size:13px;font-weight:600;margin-bottom:10px"></div>
               <div style="display:flex;gap:8px">
                 <button onclick="confirmarRemocaoMeses('${empresaId}')"
-                  style="padding:6px 14px;background:#e2705c;border:none;border-radius:6px;
+                  style="padding:6px 14px;background:var(--red);border:none;border-radius:6px;
                   color:#fff;font-size:12px;font-weight:600;cursor:pointer">
                   Confirmar exclusão
                 </button>
                 <button onclick="cancelarConfirmacaoMeses()"
-                  style="padding:6px 14px;background:transparent;border:1px solid rgba(255,255,255,.15);
-                  border-radius:6px;color:#878f9e;font-size:12px;cursor:pointer">
+                  style="padding:6px 14px;background:transparent;border:1px solid color-mix(in srgb,var(--text) 15%,transparent);
+                  border-radius:6px;color:var(--muted2);font-size:12px;cursor:pointer">
                   Cancelar
                 </button>
               </div>
             </div>
 
             ${meses.length === 0
-          ? `<div style="color:#565e6d;font-size:12px;font-style:italic;padding:8px 0">Nenhum mês carregado.</div>`
+          ? `<div style="color:var(--muted);font-size:12px;font-style:italic;padding:8px 0">Nenhum mês carregado.</div>`
           : meses.sort((a, b) => a.chave.localeCompare(b.chave)).map(m => `
                 <div id="row-mes-${m.chave}" style="display:flex;align-items:center;gap:10px;
-                  background:#161a22;border:1px solid rgba(255,255,255,.06);border-radius:8px;
+                  background:var(--surface2);border:1px solid color-mix(in srgb,var(--text) 6%,transparent);border-radius:8px;
                   padding:8px 12px;margin-bottom:6px">
                   <input type="checkbox" class="check-mes" data-chave="${m.chave}"
                     ${_selMeses.has(m.chave) ? 'checked' : ''}
                     onchange="toggleSelecaoMes('${m.chave}', this.checked)"
                     style="width:15px;height:15px;cursor:pointer;flex-shrink:0">
-                  <span style="font-size:13px;color:#e7eaf0;flex:1">📅 ${m.periodo}</span>
+                  <span style="font-size:13px;color:var(--text);flex:1">📅 ${m.periodo}</span>
                 </div>`).join('')
         }
           </div>
@@ -584,17 +586,17 @@ async function abrirEdicaoEmpresa(empresaId) {
           <div style="margin-bottom:20px">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:6px">
               <div style="font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;
-                color:#565e6d">💰 Despesas (${despesas.length})</div>
+                color:var(--muted)">💰 Despesas (${despesas.length})</div>
               ${despesas.length > 0 ? `
                 <div style="display:flex;align-items:center;gap:10px">
-                  <label style="display:flex;align-items:center;gap:5px;font-size:11px;color:#565e6d;cursor:pointer">
+                  <label style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--muted);cursor:pointer">
                     <input type="checkbox" id="checkTodosDespesas" onchange="toggleSelecaoTodosDespesas(this.checked)"
                       style="width:14px;height:14px;cursor:pointer">
                     Selecionar todos
                   </label>
                   <button id="btnRemoverDespesas" onclick="pedirConfirmacaoDespesas()"
-                    style="display:none;padding:5px 12px;background:rgba(226,112,92,.1);
-                    border:1px solid rgba(226,112,92,.3);color:#e2705c;border-radius:6px;
+                    style="display:none;padding:5px 12px;background:color-mix(in srgb,var(--red) 10%,transparent);
+                    border:1px solid color-mix(in srgb,var(--red) 30%,transparent);color:var(--red);border-radius:6px;
                     font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap">
                     🗑️ Remover selecionados (0)
                   </button>
@@ -602,34 +604,34 @@ async function abrirEdicaoEmpresa(empresaId) {
               ` : ''}
             </div>
 
-            <div id="confirmDespesasWrap" style="display:none;background:rgba(226,112,92,.1);
-              border:1px solid rgba(226,112,92,.4);border-radius:8px;padding:12px 14px;margin-bottom:10px">
-              <div id="confirmDespesasTexto" style="color:#e2705c;font-size:13px;font-weight:600;margin-bottom:10px"></div>
+            <div id="confirmDespesasWrap" style="display:none;background:color-mix(in srgb,var(--red) 10%,transparent);
+              border:1px solid color-mix(in srgb,var(--red) 40%,transparent);border-radius:8px;padding:12px 14px;margin-bottom:10px">
+              <div id="confirmDespesasTexto" style="color:var(--red);font-size:13px;font-weight:600;margin-bottom:10px"></div>
               <div style="display:flex;gap:8px">
                 <button onclick="confirmarRemocaoDespesas('${empresaId}')"
-                  style="padding:6px 14px;background:#e2705c;border:none;border-radius:6px;
+                  style="padding:6px 14px;background:var(--red);border:none;border-radius:6px;
                   color:#fff;font-size:12px;font-weight:600;cursor:pointer">
                   Confirmar exclusão
                 </button>
                 <button onclick="cancelarConfirmacaoDespesas()"
-                  style="padding:6px 14px;background:transparent;border:1px solid rgba(255,255,255,.15);
-                  border-radius:6px;color:#878f9e;font-size:12px;cursor:pointer">
+                  style="padding:6px 14px;background:transparent;border:1px solid color-mix(in srgb,var(--text) 15%,transparent);
+                  border-radius:6px;color:var(--muted2);font-size:12px;cursor:pointer">
                   Cancelar
                 </button>
               </div>
             </div>
 
             ${despesas.length === 0
-          ? `<div style="color:#565e6d;font-size:12px;font-style:italic;padding:8px 0">Nenhuma despesa carregada.</div>`
+          ? `<div style="color:var(--muted);font-size:12px;font-style:italic;padding:8px 0">Nenhuma despesa carregada.</div>`
           : despesas.sort((a, b) => a.chave.localeCompare(b.chave)).map(d => `
                 <div id="row-desp-${d.chave}" style="display:flex;align-items:center;gap:10px;
-                  background:#161a22;border:1px solid rgba(255,255,255,.06);border-radius:8px;
+                  background:var(--surface2);border:1px solid color-mix(in srgb,var(--text) 6%,transparent);border-radius:8px;
                   padding:8px 12px;margin-bottom:6px">
                   <input type="checkbox" class="check-despesa" data-chave="${d.chave}"
                     ${_selDespesas.has(d.chave) ? 'checked' : ''}
                     onchange="toggleSelecaoDespesa('${d.chave}', this.checked)"
                     style="width:15px;height:15px;cursor:pointer;flex-shrink:0">
-                  <span style="font-size:13px;color:#e7eaf0;flex:1">
+                  <span style="font-size:13px;color:var(--text);flex:1">
                     💰 ${MONTHS_PT_EMP[d.mes - 1]} ${d.ano} —
                     R$ ${(d.total || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                   </span>
@@ -641,17 +643,17 @@ async function abrirEdicaoEmpresa(empresaId) {
           <div style="margin-bottom:24px">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:6px">
               <div style="font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;
-                color:#565e6d">💵 Faturamento Real (${faturamento.length})</div>
+                color:var(--muted)">💵 Faturamento Real (${faturamento.length})</div>
               ${faturamento.length > 0 ? `
                 <div style="display:flex;align-items:center;gap:10px">
-                  <label style="display:flex;align-items:center;gap:5px;font-size:11px;color:#565e6d;cursor:pointer">
+                  <label style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--muted);cursor:pointer">
                     <input type="checkbox" id="checkTodosFaturamento" onchange="toggleSelecaoTodosFaturamento(this.checked)"
                       style="width:14px;height:14px;cursor:pointer">
                     Selecionar todos
                   </label>
                   <button id="btnRemoverFaturamento" onclick="pedirConfirmacaoFaturamento()"
-                    style="display:none;padding:5px 12px;background:rgba(226,112,92,.1);
-                    border:1px solid rgba(226,112,92,.3);color:#e2705c;border-radius:6px;
+                    style="display:none;padding:5px 12px;background:color-mix(in srgb,var(--red) 10%,transparent);
+                    border:1px solid color-mix(in srgb,var(--red) 30%,transparent);color:var(--red);border-radius:6px;
                     font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap">
                     🗑️ Remover selecionados (0)
                   </button>
@@ -659,34 +661,34 @@ async function abrirEdicaoEmpresa(empresaId) {
               ` : ''}
             </div>
 
-            <div id="confirmFaturamentoWrap" style="display:none;background:rgba(226,112,92,.1);
-              border:1px solid rgba(226,112,92,.4);border-radius:8px;padding:12px 14px;margin-bottom:10px">
-              <div id="confirmFaturamentoTexto" style="color:#e2705c;font-size:13px;font-weight:600;margin-bottom:10px"></div>
+            <div id="confirmFaturamentoWrap" style="display:none;background:color-mix(in srgb,var(--red) 10%,transparent);
+              border:1px solid color-mix(in srgb,var(--red) 40%,transparent);border-radius:8px;padding:12px 14px;margin-bottom:10px">
+              <div id="confirmFaturamentoTexto" style="color:var(--red);font-size:13px;font-weight:600;margin-bottom:10px"></div>
               <div style="display:flex;gap:8px">
                 <button onclick="confirmarRemocaoFaturamento('${empresaId}')"
-                  style="padding:6px 14px;background:#e2705c;border:none;border-radius:6px;
+                  style="padding:6px 14px;background:var(--red);border:none;border-radius:6px;
                   color:#fff;font-size:12px;font-weight:600;cursor:pointer">
                   Confirmar exclusão
                 </button>
                 <button onclick="cancelarConfirmacaoFaturamento()"
-                  style="padding:6px 14px;background:transparent;border:1px solid rgba(255,255,255,.15);
-                  border-radius:6px;color:#878f9e;font-size:12px;cursor:pointer">
+                  style="padding:6px 14px;background:transparent;border:1px solid color-mix(in srgb,var(--text) 15%,transparent);
+                  border-radius:6px;color:var(--muted2);font-size:12px;cursor:pointer">
                   Cancelar
                 </button>
               </div>
             </div>
 
             ${faturamento.length === 0
-          ? `<div style="color:#565e6d;font-size:12px;font-style:italic;padding:8px 0">Nenhum faturamento carregado.</div>`
+          ? `<div style="color:var(--muted);font-size:12px;font-style:italic;padding:8px 0">Nenhum faturamento carregado.</div>`
           : faturamento.sort((a, b) => a.chave.localeCompare(b.chave)).map(f => `
                 <div id="row-fat-${f.chave}" style="display:flex;align-items:center;gap:10px;
-                  background:#161a22;border:1px solid rgba(124,92,240,.1);border-radius:8px;
+                  background:var(--surface2);border:1px solid color-mix(in srgb,var(--accent2) 10%,transparent);border-radius:8px;
                   padding:8px 12px;margin-bottom:6px">
                   <input type="checkbox" class="check-faturamento" data-chave="${f.chave}"
                     ${_selFaturamento.has(f.chave) ? 'checked' : ''}
                     onchange="toggleSelecaoFaturamento('${f.chave}', this.checked)"
                     style="width:15px;height:15px;cursor:pointer;flex-shrink:0">
-                  <span style="font-size:13px;color:#e7eaf0;flex:1">
+                  <span style="font-size:13px;color:var(--text);flex:1">
                     💵 ${MONTHS_PT_EMP[f.mes - 1]} ${f.ano} —
                     R$ ${(f.total || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                   </span>
@@ -697,24 +699,24 @@ async function abrirEdicaoEmpresa(empresaId) {
           <!-- Ações -->
           <div style="display:flex;flex-direction:column;gap:8px">
                         <button onclick="salvarEdicaoEmpresa('${empresaId}')"
-              style="width:100%;padding:11px;background:#5B8DEF;border:none;border-radius:8px;
+              style="width:100%;padding:11px;background:var(--accent);border:none;border-radius:8px;
               color:#fff;font-size:14px;font-weight:600;cursor:pointer"
               onmouseover="this.style.opacity='.85'" onmouseout="this.style.opacity='1'">
               ✓ Salvar Alterações
             </button>
             <button onclick="subirNovaPlanilhaEmpresa('${empresaId}')"
-              style="width:100%;padding:10px;background:rgba(70,192,138,.1);
-              border:1px solid rgba(70,192,138,.25);border-radius:8px;color:#46c08a;
+              style="width:100%;padding:10px;background:color-mix(in srgb,var(--green) 10%,transparent);
+              border:1px solid color-mix(in srgb,var(--green) 25%,transparent);border-radius:8px;color:var(--green);
               font-size:13px;font-weight:600;cursor:pointer"
-              onmouseover="this.style.background='rgba(70,192,138,.18)'"
-              onmouseout="this.style.background='rgba(70,192,138,.1)'">
+              onmouseover="this.style.background='color-mix(in srgb,var(--green) 18%,transparent)'"
+              onmouseout="this.style.background='color-mix(in srgb,var(--green) 10%,transparent)'">
               📂 Subir Nova Planilha
             </button>
             <button onclick="fecharEdicao()"
               style="width:100%;padding:10px;background:transparent;
-              border:1px solid rgba(255,255,255,.08);border-radius:8px;
-              color:#565e6d;font-size:13px;cursor:pointer"
-              onmouseover="this.style.color='#878f9e'" onmouseout="this.style.color='#565e6d'">
+              border:1px solid color-mix(in srgb,var(--text) 8%,transparent);border-radius:8px;
+              color:var(--muted);font-size:13px;cursor:pointer"
+              onmouseover="this.style.color='var(--muted2)'" onmouseout="this.style.color='var(--muted)'">
               ← Voltar
             </button>
           </div>
@@ -953,12 +955,12 @@ function confirmarDeletarEmpresa(empresaId, nome) {
   overlay.innerHTML = `
     <div style="
       padding:1px;border-radius:20px;width:100%;max-width:420px;
-      background:linear-gradient(135deg,rgba(226,112,92,.45),rgba(226,112,92,.15) 55%,rgba(255,255,255,.05) 100%);
+      background:linear-gradient(135deg,color-mix(in srgb,var(--red) 45%,transparent),color-mix(in srgb,var(--red) 15%,transparent) 55%,color-mix(in srgb,var(--text) 5%,transparent) 100%);
       box-shadow:0 40px 80px -20px rgba(0,0,0,.9);
     ">
       <div style="background:var(--surface);border-radius:19px;padding:38px;text-align:center">
         <div style="width:52px;height:52px;margin:0 auto 18px;border-radius:14px;
-          background:rgba(226,112,92,.1);border:1px solid rgba(226,112,92,.35);
+          background:color-mix(in srgb,var(--red) 10%,transparent);border:1px solid color-mix(in srgb,var(--red) 35%,transparent);
           display:flex;align-items:center;justify-content:center;color:var(--red)">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
             <path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/>
@@ -981,13 +983,13 @@ function confirmarDeletarEmpresa(empresaId, nome) {
           <button id="btnConfirmarDelete"
             style="flex:1;padding:13px;background:var(--red);border:none;border-radius:11px;
             color:#fff;font-family:var(--fh);font-weight:700;font-size:13px;cursor:pointer;transition:.2s;
-            box-shadow:0 8px 20px -8px rgba(226,112,92,.5)"
+            box-shadow:0 8px 20px -8px color-mix(in srgb,var(--red) 50%,transparent)"
             onmouseover="this.style.transform='translateY(-1px)'"
             onmouseout="this.style.transform='translateY(0)'">
             Sim, excluir empresa
           </button>
           <button id="btnCancelarDelete"
-            style="flex:1;padding:13px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);
+            style="flex:1;padding:13px;background:color-mix(in srgb,var(--text) 4%,transparent);border:1px solid color-mix(in srgb,var(--text) 10%,transparent);
             border-radius:11px;color:var(--muted2);font-size:13px;font-weight:600;cursor:pointer;
             transition:.2s;font-family:var(--fb)"
             onmouseover="this.style.color='var(--text)'"

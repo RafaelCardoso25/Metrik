@@ -12,7 +12,7 @@ const _sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON, {
 // ── Verifica se está logado ao carregar qualquer página ──
 async function authGuard() {
   const { data: { session } } = await _sb.auth.getSession();
-  const isLoginPage = window.location.pathname.includes('login.html');
+  const isLoginPage = /\/login(\.html)?\/?$/.test(window.location.pathname);
 
   if (!session && !isLoginPage) {
     window.location.href = 'login.html';
@@ -148,24 +148,24 @@ function _renderUserBar(email) {
   bar.id = 'auth-user-bar';
   bar.style.cssText = `
     position: fixed;
-    bottom: 0; left: 0; right: 0;
-    height: 32px;
-    background: #0F1320;
-    border-top: 1px solid #1E2640;
+    bottom: 10px; right: 12px;
+    background: var(--surface, #0F1320);
+    border: 1px solid var(--border2, #1E2640);
+    border-radius: 10px;
     display: flex;
     align-items: center;
-    justify-content: flex-end;
-    padding: 0 16px;
-    gap: 12px;
-    z-index: 9999;
+    padding: 5px 12px;
+    gap: 10px;
+    z-index: 55;
     font-family: 'Inter', sans-serif;
     font-size: 12px;
+    box-shadow: 0 4px 16px rgba(0,0,0,.18);
   `;
   bar.innerHTML = `
-    <span style="color:#64748B;">Logado como</span>
-    <span style="color:#94A3B8;font-weight:600;">${email}</span>
+    <span style="color:var(--muted,#64748B);">Logado como</span>
+    <span style="color:var(--muted2,#94A3B8);font-weight:600;">${email}</span>
     <button onclick="authLogout()" style="
-      background:#1E2640;
+      background:transparent;
       color:#F87171;
       border:1px solid #F87171;
       border-radius:4px;
@@ -181,7 +181,7 @@ function _renderUserBar(email) {
 // ── Escuta mudanças de sessão ──
 _sb.auth.onAuthStateChange((event, session) => {
   if (event === 'SIGNED_OUT') {
-    const isLoginPage = window.location.pathname.includes('login.html');
+    const isLoginPage = /\/login(\.html)?\/?$/.test(window.location.pathname);
     if (!isLoginPage) window.location.href = 'login.html';
   }
 });
@@ -189,6 +189,10 @@ _sb.auth.onAuthStateChange((event, session) => {
 // ── Verifica expiração ao carregar ──
 _verificarExpiracao();
 
-if (!window.location.pathname.includes('admin.html')) {
+// bypass local de desenvolvimento: localhost + localStorage.metrik_dev = '1'
+const _devBypass = ['localhost', '127.0.0.1'].includes(window.location.hostname) &&
+  localStorage.getItem('metrik_dev') === '1';
+
+if (!window.location.pathname.includes('admin.html') && !_devBypass) {
   authGuard();
 }

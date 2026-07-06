@@ -1,0 +1,161 @@
+/* ═══════════════════════════════════════════════════════════
+   METRIK — SISTEMA DE TEMAS
+   Carregar DEPOIS de style.css e metrik-theme.css.
+   Tema escuro = padrão (:root dos outros arquivos).
+   Tema claro = paleta do protótipo aprovado (fundo claro + dourado).
+═══════════════════════════════════════════════════════════ */
+
+/* tokens novos usados pelos dois temas (valores do tema escuro) */
+:root{
+  --ink:#15161A;
+  --accent-text:#A9C4F7;
+  --accent2-text:#B9A6F5;
+  --accent-strong:#3A86E8;
+  --chart-grid:rgba(255,255,255,.04);
+  --chart-grid2:rgba(255,255,255,.06);
+  --modal-shadow:0 24px 64px rgba(0,0,0,.6);
+  --gold:#C19A3E;
+  --graphite:#2E2F36;
+  --classic:#5E6B82;
+}
+
+/* ─────────────── TEMA CLARO ─────────────── */
+html[data-theme="light"]{
+  --bg:#F3F4F1;
+  --surface:#FFFFFF;
+  --surface2:#FAFAF8;
+  --raise:#EFEFEA;
+  --border:#E6E7E1;
+  --border2:#D9DAD3;
+
+  /* primária = tinta/grafite (como o protótipo); dourado fica só em detalhes (--gold) */
+  --accent:#2E2F36;
+  --accent2:#5E6B82;
+  --accent-dim:rgba(21,22,26,.07);
+  --accent-text:#2E2F36;
+  --accent2-text:#5E6B82;
+  --accent-strong:#15161A;
+
+  --green:#2C7A57;
+  --red:#BC4733;
+  --yellow:#C8901F;
+  --orange:#B4622D;
+
+  --text:#15161A;
+  --muted:#8E9096;
+  --muted2:#6E7079;
+
+  --chart-grid:rgba(21,22,26,.05);
+  --chart-grid2:rgba(21,22,26,.09);
+  --modal-shadow:0 20px 56px rgba(21,22,26,.18);
+
+  /* tipografia do protótipo */
+  --fh:'Archivo',sans-serif;
+  --fb:'Inter',sans-serif;
+  --mono:'IBM Plex Mono',monospace;
+
+  /* variáveis próprias do login.html */
+  --panel:#FFFFFF;
+  --panel2:#FAFAF8;
+  --line:#E6E7E1;
+  --line2:#D9DAD3;
+  --faint:#8E9096;
+  --pos:#2C7A57;
+  --neg:#BC4733;
+  --warn:#C8901F;
+  --disp:'Archivo',sans-serif;
+  --body:'Inter',sans-serif;
+}
+
+/* ── ajustes de componentes no claro ── */
+html[data-theme="light"] body::before{background:none;animation:none}
+html[data-theme="light"] .upload-screen-new::after{background:none}
+
+/* navegação e botões sólidos: tinta (como o protótipo) */
+html[data-theme="light"] .ntab.active{background:var(--ink);color:#fff;box-shadow:none}
+html[data-theme="light"] .btn-primary,
+html[data-theme="light"] .metrik-modal-btn-confirm{background:var(--ink)}
+html[data-theme="light"] .btn-primary:hover,
+html[data-theme="light"] .metrik-modal-btn-confirm:hover{background:#2A2B31}
+html[data-theme="light"] .btn-analyze{background:var(--ink);box-shadow:0 14px 32px -14px rgba(21,22,26,.5)}
+html[data-theme="light"] .btn-analyze:hover{background:#2A2B31;box-shadow:0 18px 38px -14px rgba(21,22,26,.55)}
+html[data-theme="light"] .empresas-btn-criar{background:var(--ink)}
+html[data-theme="light"] .submit{background:var(--ink)}
+html[data-theme="light"] .submit:hover{background:#2A2B31}
+html[data-theme="light"] .login-btn{background:var(--ink)}
+html[data-theme="light"] .login-btn:hover{background:#2A2B31}
+
+/* marca dourada (como o protótipo) */
+html[data-theme="light"] .metrik-logo-mark{
+  background:linear-gradient(135deg,var(--gold),#8C6E22);
+  border-color:transparent;color:#15161A;
+  box-shadow:0 8px 28px -10px rgba(193,154,62,.55)}
+html[data-theme="light"] .bm .gl{
+  background:linear-gradient(135deg,var(--gold),#8C6E22);
+  border-color:transparent;color:#15161A}
+
+/* login: painel esquerdo claro */
+html[data-theme="light"] .brandpane{background:linear-gradient(150deg,#FAFAF8,#F3F4F1 70%)}
+html[data-theme="light"] .frame{box-shadow:0 0 0 1px rgba(193,154,62,.06),0 40px 90px -46px rgba(21,22,26,.35)}
+html[data-theme="light"] .tab.on{color:var(--accent-text)}
+
+/* sombras mais leves */
+html[data-theme="light"] .empresas-modal,
+html[data-theme="light"] .metrik-modal{box-shadow:var(--modal-shadow)}
+html[data-theme="light"] .kpi-tooltip,
+html[data-theme="light"] .drop-portal{box-shadow:0 10px 32px rgba(21,22,26,.18)}
+html[data-theme="light"] #metrikToast{box-shadow:0 8px 32px rgba(21,22,26,.22)}
+
+/* grade de fundo do upload no claro: dourado sutil */
+html[data-theme="light"] .upload-screen-new::before{
+  background-image:linear-gradient(rgba(21,22,26,.04) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(21,22,26,.04) 1px,transparent 1px)}
+
+/* números dos KPIs em tinta no claro (protótipo usa valores pretos) */
+html[data-theme="light"] .kpi-val{color:var(--ink) !important}
+
+/* botões da barra de topo: neutros no claro (protótipo usa cards brancos) */
+html[data-theme="light"] .tbtn.accent,
+html[data-theme="light"] .tbtn.green,
+html[data-theme="light"] .tbtn.csv,
+html[data-theme="light"] .tbtn.purple{
+  background:var(--surface) !important;
+  border-color:var(--border2) !important;
+  color:var(--muted2) !important;
+}
+html[data-theme="light"] .tbtn:hover{color:var(--text) !important;border-color:#C6C7BF !important}
+
+/* sidebar do dashboard: escura também no claro (como o protótipo) */
+html[data-theme="light"] .nav-tabs{background:#1A1B1F;border-right-color:#2A2B30}
+html[data-theme="light"] .nav-tabs::before{color:#fff}
+html[data-theme="light"] .nav-tabs::after{color:#62646C}
+html[data-theme="light"] .nav-tabs .ntab{color:#B7B9C0 !important}
+html[data-theme="light"] .nav-tabs .ntab:hover{background:#23242A !important;color:#fff !important}
+html[data-theme="light"] .nav-tabs .ntab.active{background:#26272D !important;color:#fff !important;border-color:#33343B !important}
+html[data-theme="light"] .nav-tabs .rgroup{color:#62646C}
+html[data-theme="light"] .msb-foot{border-top-color:#2A2B30}
+html[data-theme="light"] .msb-comp{border-color:#2A2B30;background:#23242A}
+html[data-theme="light"] .msb-info b{color:#fff}
+html[data-theme="light"] .msb-info span{color:#7B7D85}
+/* no mobile a nav volta pro topo — segue o tema claro normal */
+@media(max-width:820px){
+  html[data-theme="light"] .nav-tabs{background:var(--surface);border-color:var(--border)}
+  html[data-theme="light"] .nav-tabs .ntab{color:var(--muted) !important}
+  html[data-theme="light"] .nav-tabs .ntab.active{background:var(--ink) !important;color:#fff !important}
+}
+
+/* ─────────────── BOTÃO FLUTUANTE DE TEMA ─────────────── */
+/* canto inferior direito, acima da barra de login e ATRÁS de overlays/modais */
+#themeToggleBtn{
+  position:fixed;bottom:58px;right:22px;z-index:800;
+  width:42px;height:42px;border-radius:50%;
+  background:var(--surface);border:1px solid var(--border2);
+  color:var(--text);font-size:17px;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  box-shadow:0 6px 24px rgba(0,0,0,.25);transition:transform .15s,border-color .15s;
+}
+#themeToggleBtn:hover{transform:translateY(-2px);border-color:var(--accent)}
+html[data-theme="light"] #themeToggleBtn{box-shadow:0 6px 24px rgba(21,22,26,.14)}
+
+/* barra "logado como": abaixo da sidebar (z 60) e de qualquer overlay/modal */
+#auth-user-bar{z-index:55 !important}
