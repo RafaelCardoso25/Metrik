@@ -7,10 +7,13 @@
   <title>Metrik — Dashboard Comercial</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link
-    href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap"
+    href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&family=Archivo:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap"
     rel="stylesheet">
   <link rel="stylesheet" href="style.css">
   <link rel="stylesheet" href="metrik-theme.css">
+  <link rel="stylesheet" href="themes.css">
+  <link rel="stylesheet" href="gestao.css">
+  <script src="theme.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="supabase-cfg.js"></script>
   <script src="auth.js"></script>
@@ -51,6 +54,11 @@
         <div class="metrik-sub" id="metrikSub">Configure sua empresa e importe os dados para começar</div>
         <div id="modotesteBadge" class="up-badge" style="display:none">
           <span class="up-badge-dot"></span><b>Modo teste</b> · nada será salvo
+        </div>
+        <div style="margin-top:14px">
+          <button id="btnGestaoUpload" class="gbtn ghost" style="display:none" onclick="abrirGestao()">
+            👥 Gestão de Clientes &amp; Contas
+          </button>
         </div>
       </div>
 
@@ -257,12 +265,13 @@
           <button class="tbtn" onclick="openBenchmarksModal()">⚙️ Benchmarks</button>
           <button class="tbtn csv" onclick="exportExcel()">📥 Excel</button>
           <button class="tbtn green" onclick="exportPDF()">📄 PDF</button>
-          <button class="tbtn purple" onclick="exportPPTX()">📊 PPTX</button>
-          <button id="btnApresentacao" class="tbtn" onclick="toggleApresentacao()">🖥️ Apresentação</button>
-          <button onclick="abrirEdicaoEmpresaDash()" style="padding:6px 14px;background:rgba(255,255,255,.05);
-            border:1px solid rgba(255,255,255,.1);border-radius:8px;color:rgba(255,255,255,.6);
+          <button class="tbtn purple" onclick="exportPPTX()">📊 Baixar PPTX</button>
+          <button id="btnApresentacao" class="tbtn" onclick="toggleApresentacao()">🖥️ Apresentar na Tela</button>
+          <button class="tbtn accent" onclick="abrirGestao()">👥 Gestão</button>
+          <button onclick="abrirEdicaoEmpresaDash()" style="padding:6px 14px;background:color-mix(in srgb,var(--text) 5%,transparent);
+            border:1px solid color-mix(in srgb,var(--text) 10%,transparent);border-radius:8px;color:color-mix(in srgb,var(--text) 60%,transparent);
             font-size:12px;cursor:pointer;transition:.2s" onmouseover="this.style.color='#fff'"
-            onmouseout="this.style.color='rgba(255,255,255,.6)'">
+            onmouseout="this.style.color='color-mix(in srgb,var(--text) 60%,transparent)'">
             ⚙️ Empresa
           </button>
           <button class="tbtn" onclick="novoPeriodo()">📂 Subir Planilhas</button>
@@ -285,7 +294,7 @@
           <button class="apres-interval-btn dfilter-btn" onclick="setApresInterval(15000,this)">15s</button>
           <button class="apres-interval-btn dfilter-btn" onclick="setApresInterval(0,this)">Manual</button>
         </div>
-        <button onclick="sairApresentacao()" style="background:rgba(226,112,92,.1);border:1px solid rgba(226,112,92,.3);
+        <button onclick="sairApresentacao()" style="background:color-mix(in srgb,var(--red) 10%,transparent);border:1px solid color-mix(in srgb,var(--red) 30%,transparent);
           color:var(--red);padding:6px 14px;border-radius:7px;cursor:pointer;font-size:12px">✕ Sair</button>
         <div style="width:100%;height:2px;background:var(--border);border-radius:1px;margin-top:4px">
           <div id="apresentacaoProgress"
@@ -561,6 +570,163 @@
     </div>
   </div>
 
+  <!-- ═══════════ GESTÃO DE CLIENTES & CONTAS ═══════════ -->
+  <div id="gestaoScreen">
+    <div class="container">
+
+      <!-- TOPBAR -->
+      <div class="topbar">
+        <div class="topbar-left">
+          <h1>👥 <span>Gestão de Clientes</span></h1>
+          <p id="gHeaderSub">Categorias, contas e distribuição inteligente</p>
+        </div>
+        <div class="topbar-right">
+          <span id="gPeriodBadge" class="period-badge">🗓 —</span>
+          <button class="tbtn" onclick="gAbrirConfig()">⚙️ Contas &amp; Regras</button>
+          <button class="tbtn csv" onclick="gDownloadTemplate()">📥 Template</button>
+          <button class="tbtn" onclick="voltarDoGestao()">← Voltar</button>
+        </div>
+      </div>
+
+      <!-- MESES -->
+      <div id="gMonthTabs" class="gmonths"></div>
+
+      <!-- NAV -->
+      <div class="gnav">
+        <button class="gntab active" data-gtab="painel" onclick="gShowTab('painel')">Painel</button>
+        <button class="gntab" data-gtab="clientes" onclick="gShowTab('clientes')">Clientes</button>
+        <button class="gntab" data-gtab="dist" onclick="gShowTab('dist')">Distribuição por conta</button>
+        <button class="gntab" data-gtab="custos" onclick="gShowTab('custos')">Custos</button>
+        <button class="gntab" data-gtab="importar" onclick="gShowTab('importar')">Importar</button>
+      </div>
+
+      <!-- PAINEL -->
+      <div class="gtab-panel active" id="gtab-painel">
+        <div id="gKpis" class="kpi-grid"></div>
+        <div class="grid-2">
+          <div class="card">
+            <div class="card-title"><span class="dot" style="background:var(--accent)"></span>Faturamento × Custo
+              <span style="font-size:11px;color:var(--muted);font-weight:400;margin-left:auto">últimos 6 meses</span>
+            </div>
+            <div style="height:220px"><canvas id="gTrendChart"></canvas></div>
+          </div>
+          <div class="card">
+            <div class="card-title"><span class="dot" style="background:var(--gold)"></span>Lucro por categoria</div>
+            <div id="gLucroCat"></div>
+          </div>
+        </div>
+        <div class="grid-2">
+          <div class="card">
+            <div class="card-title"><span class="dot" style="background:var(--green)"></span>Resultado por conta</div>
+            <div id="gResultConta"></div>
+          </div>
+          <div class="card">
+            <div class="card-title"><span class="dot" style="background:var(--yellow)"></span>Avisos</div>
+            <div id="gAvisos"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- CLIENTES -->
+      <div class="gtab-panel" id="gtab-clientes">
+        <div class="gtoolbar">
+          <div class="gseg" id="gSegTier">
+            <button class="on" data-tier="all" onclick="gSetTier('all',this)">Todos</button>
+            <button data-tier="Black" onclick="gSetTier('Black',this)">Black</button>
+            <button data-tier="Gold" onclick="gSetTier('Gold',this)">Gold</button>
+            <button data-tier="Classico" onclick="gSetTier('Classico',this)">Clássico</button>
+          </div>
+          <select class="gfilter" id="gFiltConta" onchange="gRenderClientes()"></select>
+          <select class="gfilter" id="gFiltRec" onchange="gRenderClientes()">
+            <option value="all">Recorrência</option>
+            <option value="Mensal">Mensal</option>
+            <option value="Avulso">Avulso</option>
+          </select>
+          <div class="gspacer"></div>
+          <button class="gbtn" onclick="gAbrirNovoCliente()">＋ Novo cliente</button>
+        </div>
+        <div class="gtbl-card">
+          <table class="gtbl" id="gCliTable">
+            <thead><tr>
+              <th data-gsort="nome">Cliente <span class="arr">▼</span></th>
+              <th data-gsort="tier">Categoria <span class="arr">▼</span></th>
+              <th data-gsort="conta">Conta <span class="arr">▼</span></th>
+              <th class="num" data-gsort="faturamento">Faturamento <span class="arr">▼</span></th>
+              <th class="num" data-gsort="margem">Margem <span class="arr">▼</span></th>
+              <th class="num" data-gsort="lucro">Lucro real <span class="arr">▼</span></th>
+              <th class="num" data-gsort="horas">Horas/mês <span class="arr">▼</span></th>
+            </tr></thead>
+            <tbody id="gCliBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- DETALHE -->
+      <div class="gtab-panel" id="gtab-detalhe">
+        <div id="gDetalheWrap"></div>
+      </div>
+
+      <!-- DISTRIBUIÇÃO -->
+      <div class="gtab-panel" id="gtab-dist">
+        <div class="gdist-head">
+          <div class="gdist-note">
+            💡 Arraste clientes entre as contas. Clientes com 🔒 têm conta fixa; os demais são
+            realocados pelo motor inteligente para pagar o menor imposto possível.
+          </div>
+          <button class="gbtn" onclick="gDistribuirAuto()">🪄 Distribuir automaticamente</button>
+        </div>
+        <div id="gImpostoBar" class="gimposto-bar"></div>
+        <div class="gdist-cols" id="gDistCols"></div>
+      </div>
+
+      <!-- CUSTOS -->
+      <div class="gtab-panel" id="gtab-custos">
+        <div id="gCustosTot" class="gcost-tot"></div>
+        <div id="gCustosBanner"></div>
+        <div class="gtoolbar">
+          <div class="sec" style="margin:0;flex:1">Despesas do mês</div>
+          <button class="gbtn ghost" onclick="document.getElementById('gDespFileInput').click()">📂 Subir planilha de despesas</button>
+          <button class="gbtn" onclick="gAbrirNovaDespesa()">＋ Nova despesa</button>
+          <input type="file" id="gDespFileInput" accept=".xlsx,.xls" style="display:none" onchange="gHandleDespesasFile(event)">
+        </div>
+        <div class="gtbl-card">
+          <table class="gtbl">
+            <thead><tr><th>Descrição</th><th>Conta</th><th>Tipo</th><th class="num">Valor</th><th class="num">Data</th><th></th></tr></thead>
+            <tbody id="gCustosBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- IMPORTAR -->
+      <div class="gtab-panel" id="gtab-importar">
+        <div class="card full" style="margin-bottom:16px">
+          <div class="card-title"><span class="dot" style="background:var(--accent)"></span>Importar planilha de clientes</div>
+          <div class="drop-zone-new" id="gDropZone" onclick="document.getElementById('gFileInput').click()">
+            <span class="drop-zone-icon">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"
+                stroke-linecap="round" stroke-linejoin="round">
+                <path d="M7 18a4 4 0 0 1-1-7.9A5 5 0 0 1 16 8a4.5 4.5 0 0 1 1 8.9" />
+                <path d="M12 12v6M9.5 14.5 12 12l2.5 2.5" />
+              </svg>
+            </span>
+            <div class="drop-zone-text">Arraste a planilha ou clique para selecionar</div>
+            <div class="drop-zone-sub">Excel (.xlsx, .xls) — colunas: Cliente*, Faturamento*, Custo, Horas, Mês</div>
+          </div>
+          <input type="file" id="gFileInput" multiple accept=".xlsx,.xls" style="display:none" onchange="gHandleFiles(event)">
+          <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px">
+            <button class="gbtn ghost" onclick="gDownloadTemplate()">📥 Baixar template</button>
+          </div>
+          <div id="gImportFeedback"></div>
+        </div>
+        <div id="gImportReview" class="gimport-review"></div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- MODAL DA GESTÃO -->
+  <div id="gestaoModalWrap"></div>
+
   <!-- TELA DE EMPRESAS -->
   <div id="empresasWrap" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:9999;
     align-items:center;justify-content:center;"></div>
@@ -569,8 +735,8 @@
   <div id="loadingDadosWrap" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:9998;">
     <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;
       width:100%;height:100%;gap:16px;">
-      <div style="width:48px;height:48px;border:4px solid rgba(255,255,255,0.2);
-        border-top-color:#6c63ff;border-radius:50%;animation:spin 0.8s linear infinite;"></div>
+      <div style="width:48px;height:48px;border:4px solid color-mix(in srgb,var(--text) 20%,transparent);
+        border-top-color:var(--accent);border-radius:50%;animation:spin 0.8s linear infinite;"></div>
       <div style="color:#fff;font-size:16px;font-weight:500;">Carregando seus dados...</div>
     </div>
   </div>
@@ -584,6 +750,7 @@
   <script src="empresas.js"></script>
   <script src="db.js"></script>
   <script src="script.js"></script>
+  <script src="gestao.js"></script>
   <script>
     /* espelha nome da empresa no rodape da sidebar (somente leitura) */
     setInterval(function () {

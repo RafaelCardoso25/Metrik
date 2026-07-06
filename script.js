@@ -857,7 +857,7 @@ function updateChips() {
   }).join('');
   const fc = Object.entries(parsedFaturamento).sort((a, b) => a[0].localeCompare(b[0])).map(([k]) => {
     const [ano, mes] = k.split('-');
-    return `<div class="chip-expense" style="border-color:rgba(124,92,240,.4);background:rgba(124,92,240,.08)">
+    return `<div class="chip-expense" style="border-color:color-mix(in srgb,var(--accent2) 40%,transparent);background:color-mix(in srgb,var(--accent2) 8%,transparent)">
       💵 Faturamento Real ${MONTHS_PT[+mes - 1]} ${ano}
       <span class="chip-rm" onclick="removeFaturamento('${k}')">✕</span>
     </div>`;
@@ -1456,15 +1456,24 @@ function renderExec(M, prev) {
         <div class="exec-ring-v"><b style="color:${scoreColor}">${M.score}</b><span>/100</span></div>
       </div>
       <div class="exec-grade" style="color:${scoreColor}">${scoreGrade}</div>
+      ${(M.scoreParts && M.scoreParts.length) ? `<button type="button" class="score-toggle" onclick="toggleScoreBreakdown()" style="margin-top:8px;background:none;border:none;cursor:pointer;font-family:var(--fh);font-size:9.5px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted);display:inline-flex;align-items:center;gap:4px">Detalhes <span class="score-toggle-caret">${_scoreBreakdownOpen ? '▴' : '▾'}</span></button>` : ''}
     </div>`;
   renderScoreBreakdown(M);
+}
+
+let _scoreBreakdownOpen = false;
+function toggleScoreBreakdown() {
+  _scoreBreakdownOpen = !_scoreBreakdownOpen;
+  const el = document.getElementById('scoreBreakdown');
+  if (el) el.style.display = _scoreBreakdownOpen ? 'block' : 'none';
+  document.querySelectorAll('.score-toggle-caret').forEach(c => c.textContent = _scoreBreakdownOpen ? '▴' : '▾');
 }
 
 function renderScoreBreakdown(M) {
   const el = document.getElementById('scoreBreakdown');
   if (!el) return;
   const parts = M.scoreParts || [];
-  if (!parts.length) { el.innerHTML = ''; return; }
+  if (!parts.length) { el.innerHTML = ''; el.style.display = 'none'; return; }
   const rows = parts.map(p => {
     const pctv = p.max > 0 ? Math.round(p.pts / p.max * 100) : 0;
     const col = pctv >= 75 ? 'var(--green)' : pctv >= 45 ? 'var(--yellow)' : 'var(--red)';
@@ -1481,16 +1490,11 @@ function renderScoreBreakdown(M) {
       </div>`;
   }).join('');
   el.innerHTML = `
-    <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r);overflow:hidden">
-      <button type="button" onclick="var b=this.parentNode.querySelector('.score-bd-body');var open=b.style.display!=='none';b.style.display=open?'none':'block';this.querySelector('.score-bd-caret').textContent=open?'▸':'▾'"
-        style="width:100%;text-align:left;background:none;border:none;cursor:pointer;padding:14px 20px;display:flex;align-items:center;justify-content:space-between;font-family:var(--fh);font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted)">
-        <span>📊 Detalhamento do Score — ${M.score}/100</span>
-        <span class="score-bd-caret">▾</span>
-      </button>
-      <div class="score-bd-body" style="display:block;padding:0 20px">
-        <div style="padding-bottom:16px;padding-top:4px">${rows}</div>
-      </div>
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:16px 20px">
+      <div style="font-family:var(--fh);font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-bottom:14px">📊 Detalhamento do Score — ${M.score}/100</div>
+      ${rows}
     </div>`;
+  el.style.display = _scoreBreakdownOpen ? 'block' : 'none';
 }
 
 function setGoal(raw) {
@@ -1991,7 +1995,7 @@ function renderCanais(M) {
       options: {
         responsive: true, maintainAspectRatio: false, animation: { duration: 400 }, cutout: '65%',
         plugins: {
-          legend: { position: 'right', labels: { color: '#878f9e', font: { size: 11 }, padding: 14, usePointStyle: true, pointStyleWidth: 10 } },
+          legend: { position: 'right', labels: { color: themeC('--muted2'), font: { size: 11 }, padding: 14, usePointStyle: true, pointStyleWidth: 10 } },
           tooltip: {
             callbacks: {
               label: ctx => {
@@ -2159,12 +2163,12 @@ function renderTrendChart() {
       responsive: true, maintainAspectRatio: false,
       interaction: { mode: 'index', intersect: false },
       plugins: {
-        legend: { labels: { color: '#878f9e', font: { size: 11 } } },
+        legend: { labels: { color: themeC('--muted2'), font: { size: 11 } } },
         tooltip: { callbacks: { label: ctx => ctx.datasetIndex === 0 ? ` Conversão: ${ctx.raw}%` : ` Receita: R$${ctx.raw}k` } }
       },
       scales: {
-        x: { ticks: { color: '#565e6d', font: { size: 10 } }, grid: { color: 'rgba(255,255,255,.04)' } },
-        yConv: { position: 'left', ticks: { color: '#5B8DEF', font: { size: 10 }, callback: v => v + '%' }, grid: { color: 'rgba(255,255,255,.04)' }, title: { display: true, text: 'Conversão', color: '#5B8DEF', font: { size: 10 } } },
+        x: { ticks: { color: themeC('--muted'), font: { size: 10 } }, grid: { color: themeC('--chart-grid') } },
+        yConv: { position: 'left', ticks: { color: '#5B8DEF', font: { size: 10 }, callback: v => v + '%' }, grid: { color: themeC('--chart-grid') }, title: { display: true, text: 'Conversão', color: '#5B8DEF', font: { size: 10 } } },
         yRec: { position: 'right', ticks: { color: '#46C08A', font: { size: 10 }, callback: v => 'R$' + v + 'k' }, grid: { display: false }, title: { display: true, text: 'Receita', color: '#46C08A', font: { size: 10 } } }
       }
     }
@@ -2280,7 +2284,7 @@ function renderGraficoVendedores() {
       responsive: true, maintainAspectRatio: false, animation: { duration: 350 },
       interaction: { mode: 'index', intersect: false },
       plugins: {
-        legend: { position: 'top', labels: { color: '#878f9e', font: { size: 11 }, usePointStyle: true, pointStyleWidth: 10, padding: 16 } },
+        legend: { position: 'top', labels: { color: themeC('--muted2'), font: { size: 11 }, usePointStyle: true, pointStyleWidth: 10, padding: 16 } },
         tooltip: {
           callbacks: {
             label: ctx => {
@@ -2291,8 +2295,8 @@ function renderGraficoVendedores() {
         }
       },
       scales: {
-        x: { ticks: { color: '#565e6d', font: { size: 10 } }, grid: { color: 'rgba(255,255,255,.04)' } },
-        y: { ticks: { color: '#565e6d', font: { size: 10 }, callback: v => cfg.fmt(v) }, grid: { color: 'rgba(255,255,255,.06)' }, beginAtZero: true }
+        x: { ticks: { color: themeC('--muted'), font: { size: 10 } }, grid: { color: themeC('--chart-grid') } },
+        y: { ticks: { color: themeC('--muted'), font: { size: 10 }, callback: v => cfg.fmt(v) }, grid: { color: themeC('--chart-grid2') }, beginAtZero: true }
       }
     }
   });
@@ -2490,7 +2494,7 @@ function renderCmpContent() {
     periodoJusto = getPeriodosJustosComparativo(ano1, ano2);
     if (periodoJusto && periodoJusto.precisaCorte) {
       avisoCorteHtml = `
-        <div style="background:rgba(215,163,63,.08);border:1px solid rgba(215,163,63,.25);
+        <div style="background:color-mix(in srgb,var(--yellow) 8%,transparent);border:1px solid color-mix(in srgb,var(--yellow) 25%,transparent);
           border-radius:10px;padding:12px 16px;margin-bottom:16px;font-size:12px;
           color:var(--yellow);display:flex;align-items:center;gap:10px">
           <span style="font-size:16px">⚠️</span>
@@ -2547,7 +2551,7 @@ function renderCmpContent() {
   const fontesCmp = pairs.map(p => p.fonte).filter(Boolean);
   const fontesMistasCmp = [...new Set(fontesCmp)].length > 1;
   const avisoFontesCmpHtml = fontesMistasCmp ? `
-    <div style="background:rgba(215,163,63,.08);border:1px solid rgba(215,163,63,.3);
+    <div style="background:color-mix(in srgb,var(--yellow) 8%,transparent);border:1px solid color-mix(in srgb,var(--yellow) 30%,transparent);
       border-radius:10px;padding:12px 16px;margin-bottom:16px;
       display:flex;align-items:flex-start;gap:10px">
       <span style="font-size:18px">⚠️</span>
@@ -2597,7 +2601,7 @@ function renderCmpContent() {
     </div>
     <div class="fu d5">
       <div class="sec">Alertas Comparativos</div>
-      <div style="background:rgba(124,92,240,.05);border:1px solid rgba(124,92,240,.15);border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:var(--accent2)">
+      <div style="background:color-mix(in srgb,var(--accent2) 5%,transparent);border:1px solid color-mix(in srgb,var(--accent2) 15%,transparent);border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:var(--accent2)">
         📈 Comparando ${selected.length} períodos.
       </div>
       <div class="cmp-ins-grid" id="cmpInsGrid"></div>
@@ -2695,7 +2699,7 @@ function renderCmpContent() {
   document.getElementById('cmpInsGrid').innerHTML = cmpIns.length > 0
     ? cmpIns.map(i =>
       `<div class="cmp-ins">
-          <div class="ins-ico" style="background:rgba(124,92,240,.1)">📈</div>
+          <div class="ins-ico" style="background:color-mix(in srgb,var(--accent2) 10%,transparent)">📈</div>
           <div>
             <div class="ins-type" style="color:var(--accent2)">${i.l}</div>
             <div class="ins-txt">${i.txt}</div>
@@ -2743,12 +2747,12 @@ function renderDentChart() {
     options: {
       responsive: true, maintainAspectRatio: false, animation: { duration: 300 },
       plugins: {
-        legend: { display: selected.length > 1, labels: { color: '#878f9e', font: { size: 11 } } },
+        legend: { display: selected.length > 1, labels: { color: themeC('--muted2'), font: { size: 11 } } },
         tooltip: { callbacks: { label: ctx => labels[ctx.datasetIndex] + ': ' + cfg.fmt(ctx.raw) } }
       },
       scales: {
-        x: { ticks: { color: '#878f9e', font: { size: 11 } }, grid: { color: 'rgba(255,255,255,.04)' } },
-        y: { ticks: { color: '#565e6d', font: { size: 10 }, callback: v => cfg.fmt(v) }, grid: { color: 'rgba(255,255,255,.06)' }, beginAtZero: true }
+        x: { ticks: { color: themeC('--muted2'), font: { size: 11 } }, grid: { color: themeC('--chart-grid') } },
+        y: { ticks: { color: themeC('--muted'), font: { size: 10 }, callback: v => cfg.fmt(v) }, grid: { color: themeC('--chart-grid2') }, beginAtZero: true }
       }
     }
   });
@@ -3058,7 +3062,7 @@ function renderDespesas() {
   const fonteAusente = mesesView.find(m => m._semDados)?._fonteAusente || '';
 
   const alertaSemDadosHtml = todosSemDados ? `
-    <div style="background:rgba(226,112,92,.08);border:1px solid rgba(226,112,92,.3);
+    <div style="background:color-mix(in srgb,var(--red) 8%,transparent);border:1px solid color-mix(in srgb,var(--red) 30%,transparent);
       border-radius:10px;padding:16px 20px;margin-bottom:20px;
       display:flex;align-items:flex-start;gap:12px">
       <span style="font-size:20px">⚠️</span>
@@ -3073,7 +3077,7 @@ function renderDespesas() {
         </div>
       </div>
     </div>` : algunsSemDados ? `
-    <div style="background:rgba(215,163,63,.08);border:1px solid rgba(215,163,63,.3);
+    <div style="background:color-mix(in srgb,var(--yellow) 8%,transparent);border:1px solid color-mix(in srgb,var(--yellow) 30%,transparent);
       border-radius:10px;padding:12px 16px;margin-bottom:20px;
       display:flex;align-items:center;gap:10px">
       <span style="font-size:16px">⚠️</span>
@@ -3125,7 +3129,7 @@ function renderDespesas() {
     : mesesViewKeys.some(k => MONTHS.find(m => m.key === k));
 
   const alertaFonteHtml = !temDadosFonteAtual ? `
-    <div style="background:rgba(226,112,92,.08);border:1px solid rgba(226,112,92,.3);
+    <div style="background:color-mix(in srgb,var(--red) 8%,transparent);border:1px solid color-mix(in srgb,var(--red) 30%,transparent);
       border-radius:10px;padding:14px 18px;margin-bottom:16px;
       display:flex;align-items:flex-start;gap:12px">
       <span style="font-size:20px">⚠️</span>
@@ -3295,8 +3299,8 @@ function renderDespesas() {
             tooltip: { callbacks: { label: ctx => ` ${fmtK(ctx.raw)}` } }
           },
           scales: {
-            x: { ticks: { color: '#878f9e', font: { size: 12, weight: '600' } }, grid: { display: false } },
-            y: { ticks: { color: '#565e6d', font: { size: 10 }, callback: v => fmtK(v) }, grid: { color: 'rgba(255,255,255,.06)' } }
+            x: { ticks: { color: themeC('--muted2'), font: { size: 12, weight: '600' } }, grid: { display: false } },
+            y: { ticks: { color: themeC('--muted'), font: { size: 10 }, callback: v => fmtK(v) }, grid: { color: themeC('--chart-grid2') } }
           }
         }
       });
@@ -3315,12 +3319,12 @@ function renderDespesas() {
           responsive: true, maintainAspectRatio: false,
           interaction: { mode: 'index', intersect: false },
           plugins: {
-            legend: { labels: { color: '#878f9e', font: { size: 11 } } },
+            legend: { labels: { color: themeC('--muted2'), font: { size: 11 } } },
             tooltip: { callbacks: { label: ctx => ` ${ctx.dataset.label}: ${fmtK(ctx.raw)}` } }
           },
           scales: {
-            x: { ticks: { color: '#565e6d', font: { size: 10 } }, grid: { color: 'rgba(255,255,255,.04)' } },
-            y: { ticks: { color: '#565e6d', font: { size: 10 }, callback: v => fmtK(v) }, grid: { color: 'rgba(255,255,255,.06)' } }
+            x: { ticks: { color: themeC('--muted'), font: { size: 10 } }, grid: { color: themeC('--chart-grid') } },
+            y: { ticks: { color: themeC('--muted'), font: { size: 10 }, callback: v => fmtK(v) }, grid: { color: themeC('--chart-grid2') } }
           }
         }
       });
@@ -3413,7 +3417,7 @@ function renderFinComparativo() {
       if (periodos && periodos.precisaCorte) {
         dadosParaComparar = [...periodos.meses1, ...periodos.meses2].sort();
         avisoCorte = `
-          <div style="background:rgba(215,163,63,.08);border:1px solid rgba(215,163,63,.25);
+          <div style="background:color-mix(in srgb,var(--yellow) 8%,transparent);border:1px solid color-mix(in srgb,var(--yellow) 25%,transparent);
             border-radius:10px;padding:12px 16px;margin-bottom:16px;font-size:12px;
             color:var(--yellow);display:flex;align-items:center;gap:10px">
             <span style="font-size:16px">⚠️</span>
@@ -3443,7 +3447,7 @@ function renderFinComparativo() {
   const fontesMistasComp = fontesUsadasComp.length > 1;
   if (fontesMistasComp) {
     avisoCorte += `
-      <div style="background:rgba(215,163,63,.08);border:1px solid rgba(215,163,63,.3);
+      <div style="background:color-mix(in srgb,var(--yellow) 8%,transparent);border:1px solid color-mix(in srgb,var(--yellow) 30%,transparent);
         border-radius:10px;padding:12px 16px;margin-bottom:16px;
         display:flex;align-items:flex-start;gap:10px">
         <span style="font-size:18px">⚠️</span>
@@ -3547,7 +3551,7 @@ function renderFinYearCompare(anos, marColor) {
   const fontesUsadas = [...new Set(dadosPorAno.map(d => d.fonte).filter(Boolean))];
   const fontesMistas = fontesUsadas.length > 1;
   const avisoFontesMistasHtml = fontesMistas ? `
-    <div style="background:rgba(215,163,63,.08);border:1px solid rgba(215,163,63,.3);
+    <div style="background:color-mix(in srgb,var(--yellow) 8%,transparent);border:1px solid color-mix(in srgb,var(--yellow) 30%,transparent);
       border-radius:10px;padding:12px 16px;margin-bottom:16px;
       display:flex;align-items:flex-start;gap:10px">
       <span style="font-size:18px">⚠️</span>
@@ -3568,7 +3572,7 @@ function renderFinYearCompare(anos, marColor) {
 
   if (periodos && periodos.precisaCorte) {
     const avisoEl = document.createElement('div');
-    avisoEl.style.cssText = `background:rgba(215,163,63,.08);border:1px solid rgba(215,163,63,.25);
+    avisoEl.style.cssText = `background:color-mix(in srgb,var(--yellow) 8%,transparent);border:1px solid color-mix(in srgb,var(--yellow) 25%,transparent);
       border-radius:10px;padding:12px 16px;margin-bottom:16px;font-size:12px;color:var(--yellow);
       display:flex;align-items:center;gap:10px`;
     avisoEl.innerHTML = `<span style="font-size:16px">⚠️</span>
@@ -3635,8 +3639,8 @@ function renderFinYearCompare(anos, marColor) {
           tooltip: { callbacks: { label: ctx => ` ${ctx.raw > 0 ? '+' : ''}${ctx.raw}%` } }
         },
         scales: {
-          x: { ticks: { color: '#878f9e', font: { size: 10 } }, grid: { display: false } },
-          y: { ticks: { color: '#565e6d', font: { size: 10 }, callback: v => v + '%' }, grid: { color: 'rgba(255,255,255,.06)' } }
+          x: { ticks: { color: themeC('--muted2'), font: { size: 10 } }, grid: { display: false } },
+          y: { ticks: { color: themeC('--muted'), font: { size: 10 }, callback: v => v + '%' }, grid: { color: themeC('--chart-grid2') } }
         }
       }
     });
@@ -3659,12 +3663,12 @@ function renderFinYearCompare(anos, marColor) {
         responsive: true, maintainAspectRatio: false,
         interaction: { mode: 'index', intersect: false },
         plugins: {
-          legend: { labels: { color: '#878f9e', font: { size: 11 } } },
+          legend: { labels: { color: themeC('--muted2'), font: { size: 11 } } },
           tooltip: { callbacks: { label: ctx => ` ${ctx.dataset.label}: ${fmtK(ctx.raw)}` } }
         },
         scales: {
-          x: { ticks: { color: '#565e6d', font: { size: 10 } }, grid: { display: false } },
-          y: { ticks: { color: '#565e6d', font: { size: 10 }, callback: v => fmtK(v) }, grid: { color: 'rgba(255,255,255,.06)' } }
+          x: { ticks: { color: themeC('--muted'), font: { size: 10 } }, grid: { display: false } },
+          y: { ticks: { color: themeC('--muted'), font: { size: 10 }, callback: v => fmtK(v) }, grid: { color: themeC('--chart-grid2') } }
         }
       }
     });
@@ -4861,11 +4865,18 @@ function exportPPTX() {
   document.getElementById('exportMsg').textContent = 'Gerando apresentacao PPTX...';
   overlay.classList.add('show');
   setTimeout(() => {
+    let _pptxWatchdog = null;
     try {
       const PptxCtor = typeof PptxGenJS !== 'undefined' ? PptxGenJS : (typeof pptxgen !== 'undefined' ? pptxgen : null);
       if (!PptxCtor) { overlay.classList.remove('show'); alert('Biblioteca PPTX nao carregou.'); return; }
       const pptx = new PptxCtor();
       pptx.layout = 'LAYOUT_16x9';
+
+      // Watchdog: se a geração travar, libera o overlay em vez de ficar carregando pra sempre.
+      _pptxWatchdog = setTimeout(() => {
+        overlay.classList.remove('show');
+        showToast('A geracao do PPTX demorou demais e foi interrompida. Tente novamente.', true);
+      }, 60000);
 
       const M = getActiveData();
       const g = M.geral;
@@ -5648,9 +5659,10 @@ try {
   console.error(e2);
   overlay.classList.remove('show');
 }
-});
+}).finally(() => clearTimeout(_pptxWatchdog));
 
 } catch (e) {
+clearTimeout(_pptxWatchdog);
 console.error('Erro PPTX:', e);
 overlay.classList.remove('show');
 alert('Erro ao gerar apresentacao: ' + e.message);
@@ -5752,3 +5764,10 @@ function processarDadosCarregados() {
     console.error('Erro na inicialização:', err);
   }
 })();
+// ═══════════════════════════════════════
+//  TEMA — re-renderiza gráficos ao trocar
+// ═══════════════════════════════════════
+window.addEventListener('themechange', () => {
+  const dash = document.getElementById('dashboard');
+  if (dash && dash.style.display !== 'none' && MONTHS.length) render();
+});
