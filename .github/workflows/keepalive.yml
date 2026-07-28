@@ -1,0 +1,41 @@
+name: Supabase Keep-Alive
+
+# Mantém o projeto Supabase (free-tier) ativo, evitando o pausamento
+# automático por 7 dias de inatividade. Faz uma consulta leve ao banco
+# todo dia — muito abaixo do limite de 7 dias, com folga caso o GitHub
+# atrase ou pule alguma execução agendada.
+#
+# Pré-requisito: o projeto precisa estar DESPAUSADO. Este ping previne
+# pausamentos FUTUROS; ele não despausa um projeto já pausado.
+
+on:
+  schedule:
+    # Todo dia às 06:23 UTC (~03:23 no horário de Brasília).
+    # Minuto != 0 de propósito: o GitHub congestiona no topo da hora.
+    - cron: '23 6 * * *'
+  workflow_dispatch:  # permite rodar manualmente pelo botão "Run workflow"
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Consulta leve ao Supabase (mantém ativo)
+        env:
+          SUPABASE_URL: https://ejvsctpkvjuucywbcvbh.supabase.co
+          # Chave "anon" — pública por design (já consta em supabase-cfg.js,
+          # protegida por RLS). Não é segredo; pode ficar no arquivo.
+          SUPABASE_ANON: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVqdnNjdHBrdmp1dWN5d2JjdmJoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE4MTM2ODEsImV4cCI6MjA5NzM4OTY4MX0.ys7YL9eac2EyDpcsdQf7NAiLI5UwwjiX5X574uKkbYE
+        run: |
+          set -euo pipefail
+          # Consulta uma tabela real (executa uma query no Postgres = atividade).
+          # Com RLS, o anon recebe [] — não importa: o banco foi consultado.
+          code=$(curl -sS -o /dev/null -w "%{http_code}" --max-time 30 \
+            "$SUPABASE_URL/rest/v1/empresas?select=id&limit=1" \
+            -H "apikey: $SUPABASE_ANON" \
+            -H "Authorization: Bearer $SUPABASE_ANON" || echo "000")
+          echo "Resposta HTTP: $code"
+          if [ "$code" = "000" ]; then
+            echo "::error::Sem resposta do Supabase — o projeto pode estar PAUSADO ou fora do ar."
+            exit 1
+          fi
+          echo "Supabase respondeu (ativo). Contador de inatividade resetado."
