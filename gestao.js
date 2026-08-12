@@ -1257,7 +1257,10 @@ async function gLerPlanilhaDespesas(file) {
     const buf = await file.arrayBuffer();
     const wb = XLSX.read(buf, { cellDates: true });
     const ws = wb.Sheets[wb.SheetNames[0]];
-    const rows = XLSX.utils.sheet_to_json(ws, { defval: null });
+    // cabeçalho inteligente: pula título/linhas em branco no topo da planilha
+    const rows = (typeof sheetToRows === 'function')
+      ? sheetToRows(ws, { defval: null, raw: true })
+      : XLSX.utils.sheet_to_json(ws, { defval: null });
     if (!rows.length) throw new Error('Planilha vazia.');
 
     // coluna de rótulo (descrição da despesa) — mesma heurística da página inicial
@@ -1281,6 +1284,18 @@ async function gLerPlanilhaDespesas(file) {
     if (!monthCols.length) throw new Error('Não encontrei colunas de mês (ex: Janeiro, Fev/25, 01/2025).');
 
     const SKIP = ['TOTAL', 'TOTAIS', 'SOMA', 'SUBTOTAL', 'TOTAL GERAL', 'GRAND TOTAL'];
+    const valorDe = (raw) => typeof raw === 'number' ? raw : parseBrNum(raw);
+
+    // Detecta formato DRE (receitas positivas + despesas negativas na mesma coluna):
+    // se houver qualquer negativo, as despesas são os negativos (em módulo) e os positivos (receita) são ignorados.
+    let temNegativo = false;
+    for (const row of rows) {
+      const ln = normStr(String(row[labelCol] || ''));
+      if (SKIP.includes(ln) || ln.startsWith('TOTAL ') || ln.startsWith('GRAND ')) continue;
+      for (const mc of monthCols) { if (valorDe(row[mc.col]) < 0) { temNegativo = true; break; } }
+      if (temNegativo) break;
+    }
+
     const itens = [];
     for (const row of rows) {
       const label = String(row[labelCol] || '').trim();
@@ -1288,8 +1303,12 @@ async function gLerPlanilhaDespesas(file) {
       const ln = normStr(label);
       if (SKIP.includes(ln) || ln.startsWith('TOTAL ') || ln.startsWith('GRAND ')) continue;
       for (const mc of monthCols) {
-        const v = typeof row[mc.col] === 'number' ? row[mc.col] : parseBrNum(row[mc.col]);
-        if (v > 0) itens.push({ descricao: label, chave: mc.chave, valor: v });
+        const v = valorDe(row[mc.col]);
+        if (temNegativo) {
+          if (v < 0) itens.push({ descricao: label, chave: mc.chave, valor: -v });
+        } else {
+          if (v > 0) itens.push({ descricao: label, chave: mc.chave, valor: v });
+        }
       }
     }
     if (!itens.length) throw new Error('Nenhuma despesa com valor encontrada.');

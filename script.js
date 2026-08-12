@@ -487,6 +487,9 @@ function handleFiles(e) {
   document.getElementById('loadingScreen').style.display = 'flex';
   _detectionLogs = [];
 
+  // Erros são acumulados por arquivo: um arquivo problemático NÃO descarta os demais
+  const errosArquivos = [];
+
   const processNext = (idx) => {
     if (idx >= xlsFiles.length) {
       document.getElementById('loadingScreen').style.display = 'none';
@@ -500,6 +503,11 @@ function handleFiles(e) {
       const hasData = temMeses || (_empresaAtiva && temExtras);
       document.getElementById('btnAnalyze').style.display = hasData ? 'flex' : 'none';
 
+      if (errosArquivos.length) {
+        showErr(errosArquivos.join('<br>') +
+          (hasData ? '<br><span style="opacity:.8">Os demais arquivos foram carregados normalmente.</span>' : ''));
+      }
+
       if (e.target) e.target.value = '';
       return;
     }
@@ -508,9 +516,8 @@ function handleFiles(e) {
     readFile(xlsFiles[idx])
       .then(() => processNext(idx + 1))
       .catch(err => {
-        document.getElementById('loadingScreen').style.display = 'none';
-        showErr(err.message);
-        if (e.target) e.target.value = '';
+        errosArquivos.push(`<b>${xlsFiles[idx].name}</b>: ${err.message}`);
+        processNext(idx + 1);
       });
   };
   processNext(0);
@@ -526,7 +533,7 @@ function readFile(file) {
         let foundExpense = false;
         wb.SheetNames.forEach(name => {
           const ws = wb.Sheets[name];
-          const rows = XLSX.utils.sheet_to_json(ws, { defval: '', raw: false });
+          const rows = sheetToRows(ws);
           if (!rows || rows.length < 1) return;
           const parsed = parseSheet(rows, name, file.name);
           console.log('parseSheet retornou:', parsed, 'aba:', name);
@@ -564,7 +571,9 @@ function readFile(file) {
                   mesesCount: expData.length
                 });
               } else if (parsed && parsed._invalid && parsed.detectionLog) {
-                _detectionLogs.push({ ...parsed.detectionLog, fileName: file.name });
+                // Não bateu com nenhum formato: sinaliza como NÃO RECONHECIDO
+                // (antes aparecia como "Orçamentos detectados", o que confundia)
+                _detectionLogs.push({ ...parsed.detectionLog, _naoReconhecido: true, fileName: file.name });
               }
             }
           }
@@ -579,6 +588,52 @@ function readFile(file) {
     reader.onerror = () => reject(new Error('Erro ao ler o arquivo.'));
     reader.readAsArrayBuffer(file);
   });
+}
+
+// ═══════════════════════════════════════
+//  LEITURA DE ABA COM CABEÇALHO INTELIGENTE
+//  Planilhas exportadas costumam ter título e linhas em branco no topo
+//  (ex: "Orçamentos Emitidos" na linha 1 e o cabeçalho real na linha 3).
+// ═══════════════════════════════════════
+const HEADER_HINTS = [
+  'EMISSAO', 'APROVACAO', 'VENDEDOR', 'DENTISTA', 'CONSULTOR', 'MEDICO', 'CORRETOR',
+  'CLIENTE', 'PACIENTE', 'LEAD', 'TOTAL', 'VALOR', 'SITUACAO', 'STATUS', 'CAMPANHA',
+  'MARKETING', 'CANAL', 'ORIGEM', 'TELEFONE', 'DESPESA', 'PASSIVO', 'CATEGORIA',
+  'ITEM', 'DESCRICAO', 'FATURAMENTO', 'RECEITA', 'CAIXA', 'HORAS',
+  'JANEIRO', 'FEVEREIRO', 'MARCO', 'ABRIL', 'MAIO', 'JUNHO', 'JULHO', 'AGOSTO',
+  'SETEMBRO', 'OUTUBRO', 'NOVEMBRO', 'DEZEMBRO',
+  'JAN', 'FEV', 'MAR', 'ABR', 'MAI', 'JUN', 'JUL', 'AGO', 'SET', 'OUT', 'NOV', 'DEZ',
+];
+
+function detectHeaderRow(ws) {
+  let aoa;
+  try {
+    aoa = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null, raw: false, blankrows: true });
+  } catch (e) { return 0; }
+  const limit = Math.min(aoa.length, 15);
+  let best = -1, bestScore = 0;
+  for (let i = 0; i < limit; i++) {
+    const cells = (aoa[i] || []).map(c => normStr(String(c == null ? '' : c))).filter(Boolean);
+    if (cells.length < 2) continue;
+    let score = 0;
+    for (const c of cells) {
+      if (HEADER_HINTS.some(h => c === h || c.startsWith(h))) score++;
+    }
+    if (score > bestScore) { bestScore = score; best = i; }
+  }
+  if (bestScore >= 2 && best >= 0) return best;
+  // fallback: primeira linha com pelo menos 2 células preenchidas
+  for (let i = 0; i < limit; i++) {
+    const row = aoa[i] || [];
+    if (row.filter(c => String(c == null ? '' : c).trim() !== '').length >= 2) return i;
+  }
+  return 0;
+}
+
+function sheetToRows(ws, opts) {
+  const hdr = detectHeaderRow(ws);
+  const base = { defval: '', raw: false };
+  return XLSX.utils.sheet_to_json(ws, Object.assign(base, opts || {}, { range: hdr }));
 }
 
 function findCol(keys, candidates) {
@@ -715,6 +770,21 @@ function parseExpenseFile(rows, sheetName, fileName) {
   const totals = {};
   for (const mc of monthCols) totals[mc.key] = { ...mc, total: 0 };
   const LABEL_SKIP = ['TOTAL', 'TOTAIS', 'SOMA', 'SUBTOTAL', 'TOTAL GERAL', 'GRAND TOTAL'];
+
+  // Detecta o formato da planilha:
+  // - "com sinal" (DRE): receitas positivas + despesas NEGATIVAS na mesma coluna.
+  //   Nesse caso as despesas são os valores negativos (em módulo); positivos = receita, ignorados.
+  // - "positivo" (formato antigo): despesas lançadas como valores positivos.
+  let temNegativo = false;
+  for (const row of rows) {
+    const labelNorm = normStr(String(row[labelCol] || ''));
+    if (LABEL_SKIP.some(t => labelNorm === t) || labelNorm.startsWith('TOTAL ') || labelNorm.startsWith('GRAND ')) continue;
+    for (const mc of monthCols) {
+      if (parseBrNum(String(row[mc.colName] ?? '')) < 0) { temNegativo = true; break; }
+    }
+    if (temNegativo) break;
+  }
+
   for (const row of rows) {
     const labelRaw = String(row[labelCol] || '').trim();
     if (!labelRaw) continue;
@@ -725,7 +795,11 @@ function parseExpenseFile(rows, sheetName, fileName) {
       const raw = row[mc.colName];
       if (raw === null || raw === undefined || raw === '') continue;
       const vv = parseBrNum(String(raw));
-      if (vv > 0) totals[mc.key].total += vv;
+      if (temNegativo) {
+        if (vv < 0) totals[mc.key].total += -vv; // despesa = valor negativo, somado em módulo
+      } else {
+        if (vv > 0) totals[mc.key].total += vv;
+      }
     }
   }
   const results = Object.values(totals).filter(m => m.total > 0);
@@ -874,9 +948,20 @@ function updateChips() {
       : isExp
         ? [{ k: 'Despesas/Passivos', ok: true }, { k: 'Meses: ' + log.mesesCount, ok: true }]
         : [{ k: 'Emissão', ok: log.emissao }, { k: vLabel, ok: log.dentista }, { k: 'Situação', ok: log.situacao }, { k: 'Total', ok: log.total }, { k: 'Campanha', ok: log.campanha, opt: true }];
-    const icon = isFat ? '💵' : isExp ? '💰' : '📋';
-    const label = isFat ? 'Faturamento real detectado' : isExp ? 'Despesas detectadas' : 'Orçamentos detectados';
-    return `<div class="det-file"><div class="det-file-name">${icon} <strong>${log.fileName}</strong> — ${label}</div><div class="det-cols">${cols.map(cc => `<span class="det-col ${cc.ok ? 'det-ok' : cc.opt ? 'det-info' : 'det-miss'}">${cc.ok ? '✓' : '✗'} ${cc.k}</span>`).join('')}</div></div>`;
+    const isBad = log._naoReconhecido;
+    const icon = isFat ? '💵' : isExp ? '💰' : isBad ? '⚠️' : '📋';
+    const label = isFat ? 'Faturamento real detectado'
+      : isExp ? 'Despesas detectadas'
+        : isBad ? 'Formato não reconhecido' : 'Orçamentos detectados';
+    const dica = isBad
+      ? `<div style="font-size:11px;color:var(--muted2);margin-top:7px;line-height:1.6">
+           Este arquivo não bateu com nenhum formato. Confira se ele é:
+           <b>orçamentos</b> (precisa das colunas ${vLabel}, Situação e Total),
+           <b>despesas</b> (itens nas linhas e meses nas colunas) ou
+           <b>faturamento real</b> (linha "Receita Real" com o mês na coluna).
+         </div>`
+      : '';
+    return `<div class="det-file"><div class="det-file-name">${icon} <strong>${log.fileName}</strong> — ${label}</div><div class="det-cols">${cols.map(cc => `<span class="det-col ${cc.ok ? 'det-ok' : cc.opt ? 'det-info' : 'det-miss'}">${cc.ok ? '✓' : '✗'} ${cc.k}</span>`).join('')}</div>${dica}</div>`;
   }).join('');
 }
 
