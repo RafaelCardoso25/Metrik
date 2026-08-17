@@ -221,3 +221,31 @@ async function dbCarregarDadosEdicao(empresaId) {
     faturamento: faturamento || [],
   };
 }
+// ═══════════════════════════════════════
+//  EXCLUÍDOS DA ABA RECUPERAR
+// ═══════════════════════════════════════
+async function dbListarRecExcluidos(empresaId) {
+  const { data, error } = await _sb
+    .from('recuperar_excluidos')
+    .select('nome_norm,nome')
+    .eq('empresa_id', empresaId);
+  if (error) throw error;
+  return data || [];
+}
+
+async function dbSalvarRecExcluido(empresaId, nomeNorm, nome) {
+  const { error } = await _sb
+    .from('recuperar_excluidos')
+    .upsert({ empresa_id: empresaId, nome_norm: nomeNorm, nome: nome },
+            { onConflict: 'empresa_id,nome_norm' });
+  if (error) throw error;
+}
+
+async function dbRemoverRecExcluido(empresaId, nomeNorm) {
+  const { error } = await _sb
+    .from('recuperar_excluidos')
+    .delete()
+    .eq('empresa_id', empresaId)
+    .eq('nome_norm', nomeNorm);
+  if (error) throw error;
+}

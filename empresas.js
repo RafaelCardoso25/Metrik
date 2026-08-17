@@ -57,6 +57,9 @@ async function entrarEmpresa(empresa) {
     showToast('Erro ao carregar dados da empresa.', true);
   }
 
+  // nomes excluídos da aba Recuperar (persistem entre planilhas)
+  if (typeof carregarRecExcluidos === 'function') await carregarRecExcluidos();
+
   document.getElementById('loadingDadosWrap').style.display = 'none';
 
   const temDados = Object.keys(parsedMonths).length > 0;
@@ -96,6 +99,8 @@ function entrarModoTeste() {
   YEARS = {};
 
   CFG = { empresa: 'Teste', vendedor: 'Vendedor', cliente: 'Cliente', proposta: 'Orçamento', meta: 0 };
+
+  if (typeof carregarRecExcluidos === 'function') carregarRecExcluidos();
 
   document.getElementById('empresasWrap').style.display = 'none';
   document.getElementById('uploadScreen').style.display = 'flex';

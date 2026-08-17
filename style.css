@@ -678,3 +678,9 @@ body::before{content:'';position:fixed;inset:0;background:
   background: color-mix(in srgb,var(--text) 10%,transparent);
   color: var(--text);
 }
+/* ─── ABA RECUPERAR: botão de excluir da lista ─── */
+.rec-del{background:none;border:1px solid var(--border2);color:var(--muted);font-size:13px;
+  cursor:pointer;padding:6px 9px;border-radius:8px;line-height:1;transition:.15s;flex-shrink:0}
+.rec-del:hover{color:var(--red);border-color:color-mix(in srgb,var(--red) 45%,transparent);
+  background:color-mix(in srgb,var(--red) 10%,transparent)}
+.dfilter-btn[disabled]{pointer-events:none}

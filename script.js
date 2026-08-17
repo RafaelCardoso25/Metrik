@@ -56,6 +56,12 @@ let _apresentacaoTimer = null;
 let _apresentacaoProgressTimer = null;
 let _apresentacaoTabIdx = 0;
 let _finMesesSelecionados = new Set();
+// Aba Recuperar: nomes excluídos pela cliente (normalizados), paginação e filtro.
+// Afeta SOMENTE a aba Recuperar — nunca os KPIs, o score ou os relatórios.
+let _recExcluidos = new Set();
+let _recExcluidosNomes = {};
+let _recPorPagina = 10;
+let _recPagina = 1;
 const _apresentacaoTabs = ['visao', 'vendedores-detalhe', 'vendedores', 'canais', 'recuperar', 'comparativo', 'financeiro', 'acoes'];
 
 // ═══════════════════════════════════════
@@ -86,6 +92,54 @@ function loadLocalState() {
     const b = localStorage.getItem('dash_benchmarks');
     if (b) _benchmarks = { ..._benchmarks, ...JSON.parse(b) };
   } catch (e) { }
+}
+
+// ═══════════════════════════════════════
+//  EXCLUÍDOS DA ABA RECUPERAR — persistência
+//  Empresa ativa → Supabase (vale em qualquer navegador).
+//  Modo teste / sem empresa → localStorage.
+// ═══════════════════════════════════════
+function _recLocalKey() {
+  return 'metrik_rec_excluidos_' + ((typeof _empresaAtiva !== 'undefined' && _empresaAtiva) ? _empresaAtiva.id : 'local');
+}
+function _recSalvarLocal() {
+  try {
+    const arr = [..._recExcluidos].map(k => ({ k, n: _recExcluidosNomes[k] || k }));
+    localStorage.setItem(_recLocalKey(), JSON.stringify(arr));
+  } catch (e) { }
+}
+async function carregarRecExcluidos() {
+  _recExcluidos = new Set();
+  _recExcluidosNomes = {};
+  const temEmpresa = typeof _empresaAtiva !== 'undefined' && _empresaAtiva;
+  if (temEmpresa && typeof dbListarRecExcluidos === 'function') {
+    try {
+      const linhas = await dbListarRecExcluidos(_empresaAtiva.id);
+      linhas.forEach(l => { _recExcluidos.add(l.nome_norm); _recExcluidosNomes[l.nome_norm] = l.nome; });
+      return;
+    } catch (err) {
+      console.error('Erro ao carregar excluídos da recuperação', err);
+      // cai para o localStorage se a tabela ainda não existir
+    }
+  }
+  try {
+    const raw = localStorage.getItem(_recLocalKey());
+    if (raw) JSON.parse(raw).forEach(o => { _recExcluidos.add(o.k); _recExcluidosNomes[o.k] = o.n; });
+  } catch (e) { }
+}
+async function salvarRecExcluido(chave, nome) {
+  _recSalvarLocal();
+  if (typeof _empresaAtiva !== 'undefined' && _empresaAtiva && typeof dbSalvarRecExcluido === 'function') {
+    try { await dbSalvarRecExcluido(_empresaAtiva.id, chave, nome); }
+    catch (err) { console.error('Erro ao salvar exclusão', err); showToast('Exclusão salva só neste navegador (verifique o recuperar.sql).', true); }
+  }
+}
+async function removerRecExcluido(chave) {
+  _recSalvarLocal();
+  if (typeof _empresaAtiva !== 'undefined' && _empresaAtiva && typeof dbRemoverRecExcluido === 'function') {
+    try { await dbRemoverRecExcluido(_empresaAtiva.id, chave); }
+    catch (err) { console.error('Erro ao remover exclusão', err); }
+  }
 }
 
 // ═══════════════════════════════════════
@@ -1092,9 +1146,12 @@ function computeMonth(data, prev) {
     if (!cancByDent[r.dentista]) cancByDent[r.dentista] = { nome: r.dentista, count: 0, valor: 0 };
     cancByDent[r.dentista].count++; cancByDent[r.dentista].valor += r.total;
   }
-  const topVencidos = [...vencidos].sort((a, b) => b.total - a.total).slice(0, 8);
+  // vencidosAll = lista COMPLETA (usada só pela aba Recuperar, que tem filtro/paginação).
+  // topVencidos continua sendo o top 8 e alimenta a análise (resumo, ações, exports) — não mexer.
+  const vencidosOrdenados = [...vencidos].sort((a, b) => b.total - a.total);
+  const topVencidos = vencidosOrdenados.slice(0, 8);
   const sc = calcScore({ geral, dentistas, canais, prevGeral: prev ? prev.geral : null });
-  return { key, periodo, mes, ano, geral, dentistas, canais, cancelados, cancByDent: Object.values(cancByDent), topVencidos, score: sc.score, scoreParts: sc.parts };
+  return { key, periodo, mes, ano, geral, dentistas, canais, cancelados, cancByDent: Object.values(cancByDent), topVencidos, vencidosAll: vencidosOrdenados, score: sc.score, scoreParts: sc.parts };
 }
 
 function calcScore({ geral, dentistas, canais, prevGeral }) {
@@ -2177,24 +2234,218 @@ function renderCanais(M) {
 
 // ═══════════════════════════════════════
 //  RECUPERAR / VENCIDOS
+//  IMPORTANTE: exclusões e deduplicação valem SOMENTE nesta aba.
+//  Os KPIs (Receita Perdida, Potencial Recuperável), o score, o resumo
+//  executivo e as exportações continuam usando TODOS os vencidos.
 // ═══════════════════════════════════════
+
+// Chave de identidade da pessoa: sem acento/maiúsculas e com espaços repetidos colapsados
+// ("Roberta  Lima", "ROBERTA LIMA" e "roberta lima" são a mesma pessoa).
+function _recKey(nome) {
+  return normStr(nome).replace(/\s+/g, ' ').trim();
+}
+
+// Monta a lista da aba: remove excluídos e mantém 1 linha por pessoa (a de maior valor)
+function buildRecuperarList(M) {
+  const base = (M.vencidosAll && M.vencidosAll.length) ? M.vencidosAll : (M.topVencidos || []);
+  const porPessoa = new Map();
+  let semNome = 0;
+
+  for (const v of base) {
+    const nome = String(v.paciente || '').trim();
+    const chave = nome ? _recKey(nome) : null;
+
+    // excluído pela cliente → não entra (vale também para planilhas futuras)
+    if (chave && _recExcluidos.has(chave)) continue;
+
+    // sem nome não dá pra agrupar com segurança: cada um vira uma linha própria
+    const k = chave || `__sem_nome_${semNome++}`;
+    const atual = porPessoa.get(k);
+    if (!atual || v.total > atual.total) porPessoa.set(k, v);
+  }
+
+  return [...porPessoa.values()].sort((a, b) => b.total - a.total);
+}
+
+function setRecPorPagina(qtd) {
+  _recPorPagina = qtd;
+  _recPagina = 1;
+  renderRecuperar(getActiveData());
+}
+function setRecPagina(p) {
+  _recPagina = p;
+  renderRecuperar(getActiveData());
+  const el = document.getElementById('vencList');
+  if (el) el.scrollIntoView({ block: 'nearest' });
+}
+
 function renderRecuperar(M) {
-  const cLabel = CFG.cliente || 'Cliente';
-  document.getElementById('vencList').innerHTML = M.topVencidos.map(v => {
+  const lista = buildRecuperarList(M);
+  const totalItens = lista.length;
+  const totalPaginas = Math.max(1, Math.ceil(totalItens / _recPorPagina));
+  if (_recPagina > totalPaginas) _recPagina = totalPaginas;
+  const ini = (_recPagina - 1) * _recPorPagina;
+  const pagina = lista.slice(ini, ini + _recPorPagina);
+  const valorTotal = lista.reduce((s, v) => s + v.total, 0);
+
+  // ── barra de controles ──
+  const opcoes = [10, 20, 50].map(n =>
+    `<button class="dfilter-btn ${_recPorPagina === n ? 'active' : ''}" onclick="setRecPorPagina(${n})">${n}</button>`
+  ).join('');
+  const qtdExcluidos = _recExcluidos.size;
+  const controles = `
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px">
+      <span style="font-size:11px;color:var(--muted);font-weight:600">Mostrar:</span>
+      ${opcoes}
+      <span style="font-size:11.5px;color:var(--muted2);margin-left:4px">
+        ${totalItens} ${totalItens === 1 ? 'pessoa' : 'pessoas'} · ${fmtK(valorTotal)} em aberto
+      </span>
+      <div style="flex:1"></div>
+      ${qtdExcluidos > 0
+      ? `<button class="dfilter-btn" onclick="abrirExcluidosModal()" title="Ver e restaurar excluídos">
+           🚫 ${qtdExcluidos} excluído${qtdExcluidos > 1 ? 's' : ''}
+         </button>` : ''}
+    </div>`;
+
+  // ── linhas ──
+  const linhas = pagina.map(v => {
     const dias = diasParado(v.emissao);
+    const nome = String(v.paciente || '').trim();
+    const nomeEsc = nome.replace(/'/g, "\\'").replace(/"/g, '&quot;');
     return `<div class="vrow">
       <div>
-        <div class="vnom">${v.paciente || '—'}</div>
+        <div class="vnom">${nome || '—'}</div>
         <div class="vmeta">📣 ${canalDisplay(v.campanha || '')}${v.emissao ? ' · 📅 ' + v.emissao.toLocaleDateString('pt-BR') : ''}</div>
         <div>${diasBadge(dias)}</div>
         <div class="vtel">${v.telefone ? `<a href="tel:${v.telefone.replace(/\D/g, '')}">📞 ${v.telefone}</a>` : ''}</div>
       </div>
-      <div>
-        <div class="vval">${fmtK(v.total)}</div>
-        <div class="vdent">${v.dentista || '—'}</div>
+      <div style="display:flex;align-items:center;gap:12px">
+        <div style="text-align:right">
+          <div class="vval">${fmtK(v.total)}</div>
+          <div class="vdent">${v.dentista || '—'}</div>
+        </div>
+        ${nome ? `<button class="rec-del" title="Excluir da lista de recuperação"
+          onclick="confirmarExclusaoRecuperar('${nomeEsc}')">🗑️</button>` : ''}
       </div>
     </div>`;
-  }).join('') || `<div style="color:var(--muted);padding:12px 0">Nenhum vencido.</div>`;
+  }).join('');
+
+  // ── paginação ──
+  let paginacao = '';
+  if (totalPaginas > 1) {
+    const btn = (p, txt, dis) =>
+      `<button class="dfilter-btn ${p === _recPagina ? 'active' : ''}" ${dis ? 'disabled style="opacity:.4;cursor:default"' : `onclick="setRecPagina(${p})"`}>${txt}</button>`;
+    // janela de páginas em volta da atual
+    const nums = [];
+    const de = Math.max(1, _recPagina - 2), ate = Math.min(totalPaginas, _recPagina + 2);
+    if (de > 1) nums.push(btn(1, '1'));
+    if (de > 2) nums.push(`<span style="color:var(--muted);font-size:11px">…</span>`);
+    for (let p = de; p <= ate; p++) nums.push(btn(p, String(p)));
+    if (ate < totalPaginas - 1) nums.push(`<span style="color:var(--muted);font-size:11px">…</span>`);
+    if (ate < totalPaginas) nums.push(btn(totalPaginas, String(totalPaginas)));
+
+    paginacao = `
+      <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:16px;padding-top:14px;border-top:1px solid var(--border)">
+        ${btn(_recPagina - 1, '← Anterior', _recPagina === 1)}
+        ${nums.join('')}
+        ${btn(_recPagina + 1, 'Próxima →', _recPagina === totalPaginas)}
+        <span style="font-size:11px;color:var(--muted);margin-left:6px">
+          ${ini + 1}–${Math.min(ini + _recPorPagina, totalItens)} de ${totalItens}
+        </span>
+      </div>`;
+  }
+
+  const vazio = `<div style="color:var(--muted);padding:12px 0">${qtdExcluidos > 0
+    ? 'Nenhum vencido para exibir (todos excluídos da lista).'
+    : 'Nenhum vencido.'}</div>`;
+
+  document.getElementById('vencList').innerHTML =
+    controles + (linhas || vazio) + paginacao;
+}
+
+// ── exclusão com confirmação ──
+function confirmarExclusaoRecuperar(nome) {
+  const existing = document.getElementById('recExcluirModal');
+  if (existing) existing.remove();
+  const cLabel = (CFG.cliente || 'Cliente').toLowerCase();
+  const modal = document.createElement('div');
+  modal.id = 'recExcluirModal';
+  modal.className = 'metrik-modal-overlay';
+  modal.innerHTML = `
+    <div class="metrik-modal" style="max-width:460px">
+      <div class="metrik-modal-title">Excluir da lista de recuperação?</div>
+      <div class="metrik-modal-sub">
+        <b style="color:var(--text)">${nome}</b> deixará de aparecer na aba Recuperar —
+        inclusive nas <b>próximas planilhas</b> que você subir com esse nome.<br><br>
+        Se esse ${cLabel} aparecer mais de uma vez, <b>todas</b> as ocorrências saem da lista.<br><br>
+        <span style="color:var(--muted)">Os valores continuam contando normalmente na análise
+        (Receita Perdida, KPIs e relatórios). Você pode restaurar depois.</span>
+      </div>
+      <div class="metrik-modal-footer">
+        <button class="metrik-modal-btn-confirm" style="background:var(--red)"
+          onclick="excluirDeRecuperar('${nome.replace(/'/g, "\\'")}')">Sim, excluir</button>
+        <button class="metrik-modal-btn-cancel" onclick="document.getElementById('recExcluirModal').remove()">Cancelar</button>
+      </div>
+    </div>`;
+  modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+  document.body.appendChild(modal);
+}
+
+async function excluirDeRecuperar(nome) {
+  const modal = document.getElementById('recExcluirModal');
+  if (modal) modal.remove();
+  const chave = _recKey(nome);
+  if (!chave) return;
+  _recExcluidos.add(chave);
+  _recExcluidosNomes[chave] = nome;
+  await salvarRecExcluido(chave, nome);
+  _recPagina = 1;
+  renderRecuperar(getActiveData());
+  showToast(`🚫 ${nome} removido da lista de recuperação.`);
+}
+
+// ── ver / restaurar excluídos ──
+function abrirExcluidosModal() {
+  const existing = document.getElementById('recExcluidosModal');
+  if (existing) { existing.remove(); return; }
+  const itens = [..._recExcluidos].map(k => ({ chave: k, nome: _recExcluidosNomes[k] || k }))
+    .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+  const modal = document.createElement('div');
+  modal.id = 'recExcluidosModal';
+  modal.className = 'metrik-modal-overlay';
+  modal.innerHTML = `
+    <div class="metrik-modal" style="max-width:480px">
+      <div class="metrik-modal-title">🚫 Excluídos da recuperação</div>
+      <div class="metrik-modal-sub">
+        Estes nomes não aparecem na aba Recuperar, mesmo em planilhas novas.
+        Clique em <b>Restaurar</b> para voltar a exibi-los.
+      </div>
+      <div style="max-height:320px;overflow-y:auto;display:flex;flex-direction:column;gap:6px">
+        ${itens.map(i => `
+          <div style="display:flex;align-items:center;gap:10px;background:var(--surface2);
+            border:1px solid var(--border);border-radius:8px;padding:9px 12px">
+            <span style="flex:1;font-size:13px;color:var(--text)">${i.nome}</span>
+            <button class="dfilter-btn" onclick="restaurarDeRecuperar('${i.chave.replace(/'/g, "\\'")}')">↩ Restaurar</button>
+          </div>`).join('') || '<div style="color:var(--muted);font-size:13px">Nenhum excluído.</div>'}
+      </div>
+      <div class="metrik-modal-footer">
+        <button class="metrik-modal-btn-cancel" onclick="document.getElementById('recExcluidosModal').remove()">Fechar</button>
+      </div>
+    </div>`;
+  modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+  document.body.appendChild(modal);
+}
+
+async function restaurarDeRecuperar(chave) {
+  _recExcluidos.delete(chave);
+  const nome = _recExcluidosNomes[chave];
+  delete _recExcluidosNomes[chave];
+  await removerRecExcluido(chave);
+  const modal = document.getElementById('recExcluidosModal');
+  if (modal) modal.remove();
+  renderRecuperar(getActiveData());
+  if (_recExcluidos.size > 0) abrirExcluidosModal();
+  showToast(`↩ ${nome || 'Nome'} restaurado na lista de recuperação.`);
 }
 
 // ═══════════════════════════════════════
@@ -2980,7 +3231,7 @@ function getFinMesData(key) {
       total: 0, aprovados: 0, vencidos: 0, cancelados: 0,
       taxa: 0, orcado: 0, perdido: 0, canceladoVal: 0
     },
-    dentistas: [], canais: [], cancelados: [], cancByDent: [], topVencidos: [], score: 0
+    dentistas: [], canais: [], cancelados: [], cancByDent: [], topVencidos: [], vencidosAll: [], score: 0
   };
 }
 
@@ -3908,12 +4159,13 @@ function getAcoesList(M, prev_) {
   const pLabelP = pluralizar(pLabel);
   const piorTaxa = [...M.dentistas].filter(d => d.total >= 5).sort((a, b) => a.taxa - b.taxa)[0];
   const upsell = [...M.dentistas].filter(d => d.taxa >= 85 && d.total >= 5).sort((a, b) => a.ticket_medio - b.ticket_medio)[0];
-  const top5 = M.topVencidos.slice(0, 5);
+  const top5 = M.topVencidos.slice(0, 5);            // números da ação (total em jogo) — não mudam
+  const top5Lista = buildRecuperarList(M).slice(0, 5); // nomes sugeridos — respeitam as exclusões
   const melhorCanal = [...M.canais].filter(c => c.total >= 5).sort((a, b) => b.taxa - a.taxa)[0];
   const ni = M.canais.find(c => c.canal === 'NAO INFORMADO');
   const acoes = [];
   if (top5.length > 0)
-    acoes.push({ t: `Ligar para os ${top5.length} maiores ${pLabelP.toLowerCase()} vencidos`, d: `Prioridade: ${top5.slice(0, 3).map(v => v.paciente.split(' ')[0]).join(', ')}. Total em jogo: ${fmtK(top5.reduce((s, v) => s + v.total, 0))}. Oferecer condição especial.`, p: 'ph' });
+    acoes.push({ t: `Ligar para os ${top5.length} maiores ${pLabelP.toLowerCase()} vencidos`, d: `${top5Lista.length ? `Prioridade: ${top5Lista.slice(0, 3).map(v => String(v.paciente || '').split(' ')[0]).join(', ')}. ` : ''}Total em jogo: ${fmtK(top5.reduce((s, v) => s + v.total, 0))}. Oferecer condição especial.`, p: 'ph' });
   if (piorTaxa)
     acoes.push({ t: `Reunião com ${piorTaxa.nome} — análise de ${pLabelP.toLowerCase()} perdidos`, d: `${piorTaxa.vencidos} vencidos (${fmtK(piorTaxa.valor_perdido)}). Mapear objeções e criar roteiro de resposta.`, p: 'ph' });
   if (g.cancelados > g.total * (_benchmarks.cancelamentosAlerta / 100 || 0.08))
@@ -3952,6 +4204,7 @@ function resetDash() {
   dentSort = 'taxa'; activeDentFilter = 'all'; clinicGoal = 0;
   _rangeFilter = null; _rangeFilteredData = null;
   _notas = {}; _metasMensais = {}; _finMesesSelecionados = new Set();
+  _recPagina = 1; // exclusões NÃO são zeradas: valem para as próximas planilhas
 
   [_dentChartInstance, _despChartInst, _trendChartInst, _finYearGrowthChart, _finYearLucroChart, _canalDonutChart, _vendedorTrendChart].forEach(c => {
     try { if (c) c.destroy(); } catch (e) { }
@@ -4006,6 +4259,7 @@ function novoPeriodo() {
   dentSort = 'taxa'; activeDentFilter = 'all'; clinicGoal = 0;
   _rangeFilter = null; _rangeFilteredData = null;
   _notas = {}; _metasMensais = {}; _finMesesSelecionados = new Set();
+  _recPagina = 1; // exclusões NÃO são zeradas: valem para as próximas planilhas
 
   [_dentChartInstance, _despChartInst, _trendChartInst,
    _finYearGrowthChart, _finYearLucroChart, _canalDonutChart,
@@ -4670,7 +4924,9 @@ function exportPDF() {
       doc.addPage(); pagNum++; pageBg();
       y = 14;
 
-      const topVenc = M.topVencidos.slice(0, 8);
+      // lista de follow-up respeita as exclusões e não repete a mesma pessoa.
+      // Os números do relatório (Receita Perdida, resumo, score) seguem com TODOS os vencidos.
+      const topVenc = buildRecuperarList(M).slice(0, 8);
       if (topVenc.length > 0) {
         y = secTitle(pLabelP + ' Vencidos — Prioridade de Follow-up', y);
         const thV = [clean(cLabel), clean(vLabel), 'Canal', 'Valor', 'Emissao', 'Dias'];
@@ -5636,8 +5892,11 @@ if (anoAnterior !== null && mesesAnoAnterior.length > 0) {
 // ════════════════════
 {
 const s = makeSlide('Oportunidades a Recuperar', se(pLabelP) + ' vencidos — follow-up imediato');
-const top = M.topVencidos.slice(0, 7);
-const tv = top.reduce((a, v) => a + v.total, 0);
+// "Total em risco" continua sobre TODOS os maiores vencidos (não muda com exclusões);
+// a tabela abaixo lista só quem a cliente quer trabalhar, sem repetir a mesma pessoa.
+const topAnalise = M.topVencidos.slice(0, 7);
+const tv = topAnalise.reduce((a, v) => a + v.total, 0);
+const top = buildRecuperarList(M).slice(0, 7);
 s.addText('Total em risco: ' + se(fmtK(tv)) + '   |   Recuperavel via follow-up (30%): ' + se(fmtK(tv * .3)), {
   x: .3, y: .88, w: 9.4, h: .28, fontSize: 11, color: YELLOW, bold: true, fontFace: 'Calibri'
 });
